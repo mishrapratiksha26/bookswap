@@ -1,0 +1,37 @@
+<header id="header" class="fixed-top">
+  <div class="container d-flex align-items-center">
+    <h1 class="logo mr-auto"><a href="#">BookSwap</a></h1> </div>
+
+<nav class="navbar navbar-expand-lg navbar-primary bg-custom" style="background-color: rgb(2, 139, 194); color: white;">
+  <div class="container-fluid">
+    <a class="navbar-brand" >BookSwap</a>
+    
+  
+      <ul class="navbar-nav me-auto my-2 my-lg-0 navbar-nav-scroll mr-auto" style="--bs-scroll-height: 100px;">
+        <li class="nav-item">
+          <a class="nav-link active" aria-current="page" href="/books">Home</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="/books/new">Post a book</a>
+        </li>
+    
+      </ul>
+      <!-- <form class="d-flex mr-auto" role="search">
+        <input class="form-control me-2" type="search" placeholder="Search" aria-label="Search">
+        <button class="btn btn-outline-success" style="background-color: rgb(155, 203, 222); color: rgb(4, 70, 101);" type="submit">Search</button>
+      </form> -->
+      <div class="navbar-nav ml-auto">
+        <% if(!currentUser){ %> 
+       
+        <a href="/register" class="nav-link">Register</a>
+        <a href="/login" class="nav-link">Login</a>
+        <% }else{ %> 
+          <a href="/profile" class="nav-link">Profile</a>
+        <a href="/logout" class="nav-link">Logout</a>
+     <% } %> 
+      </div>
+    </div>
+  
+</nav>
+</div>
+</header>

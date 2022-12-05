@@ -1,0 +1,58 @@
+<% layout('layouts/boilerplate') %> 
+<style>
+  .card-img-top {
+    width: 100%;
+    height: 20vw;
+    object-fit: cover;
+    
+}
+
+
+</style>
+
+<div class="container">
+   <h1><p><b>Books</b></p></h1>
+ 
+      
+    
+            <% for(let book of books){ %>
+        <div class="card mb-3 mt-2">
+       <div class="row" >
+
+
+        <div class="col-md-4">
+          <%if(book.images.length) {%>
+          <img class="card-img-top img-fluid" alt="" src="<%=book.images[0].url%>">
+          <% }else {%>
+          <img class="card-img-top img-fluid" alt=""
+              src="https://res.cloudinary.com/douqbebwk/image/upload/v1600103881/YelpCamp/lz8jjv2gyynjil7lswf4.png">
+          <% } %>
+      </div>
+
+
+
+        
+           
+            <div class="col-md-8">
+        <div class="card-body">
+          
+          
+                        
+          <h5 class="card-title"><b><%= book.title%></b></h5>
+        
+     
+          <p class="card-text"><%= book.description%></p>
+        
+       
+      
+          <a href="/books/<%=book._id %>" class="card-link btn btn-primary">View</a>
+          <!-- <a href="/books/<%=book._id%>/order" class="card-link btn btn-info ml-auto">Buy</a> -->
+     
+      </div>
+    </div>
+</div>
+</div>
+      <% } %> 
+    </div>
+
+    

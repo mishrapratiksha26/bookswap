@@ -1,0 +1,77 @@
+        <% layout('layouts/boilerplate')%>
+<div class="row">
+    <h1 class="text-center">New Book</h1>
+    <div class="col-md-6 offset-md-3">
+        <form action="/books" method="POST" novalidate class="validated-form" enctype="multipart/form-data">
+            <div class="mb-3">
+                <li class="list-group-item"> <div class="mb-3 form-group">
+                    <label class="form-label" for="title">Title: </label>
+                        <input class="form-control" type="text" id="title" name="book[title]" required>
+                   <div class="valid-feedback">
+                    looks good!
+                   </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="author">Author: </label>
+                <input class="form-control" type="text" id="author" name="book[author]" required>
+                <div class="valid-feedback">
+                    looks good!
+                   </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="input-group-text" for="inputGroupSelect01">Genre:</label>
+                <select class="form-select" id="inputGroupSelect01" name="book[genre]" required>
+                    <option selected></option>
+                    <option value="ACTION AND ADVENTURE">Adventure</option>
+                    <option value="SUSPENSE/THRILLERS">Suspense/Thriller</option>
+                    <option value="EDUCATIONAL">Educational</option>
+                    <option value="DETECTIVE AND MYSTERY">Detective and mystery</option>
+                    <option value="RELIGIOUS">Religious</option>
+                    <option value="HORROR">Horror</option>
+                    <option value="ROMANCE">Romance</option>
+                    <option value="FICTION">Fiction</option>
+                    <option value="HISTORY">History</option>
+                </select>
+                <div class="valid-feedback">
+                    Looks good!
+                </div>
+            </div>
+            <div class="mb-3">
+                <div class="form-file custom-file">
+                    <input type="file" class="form-file-input" id="image" name="image" multiple>
+                    <label class="form-file-label" for="image">
+                        <span class="form-file-text custom-file-label">Choose image(s)...</span>
+                        <span class="form-file-button">Browse</span>
+                    </label>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="description">Book description:</label>
+                <textarea class="form-control" type="text" id="description" name="book[description]" required></textarea>
+                <div class="valid-feedback">
+                    looks good!
+                   </div>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label" for="price">Original Price:</label>
+                <div class="input-group">
+                    <span class="input-group-text" id="price-label">&#x20b9;</span>
+                    <input type="text" class="form-control" placeholder="0" id="price" aria-label="price" aria-describedby="price-label" name="book[price]" required>
+                    <div class="valid-feedback">
+                        looks good!
+                       </div> 
+            </div>
+            
+
+
+            <div class="mb-3">
+                <button class="btn btn-success my-2">Post book</button>
+            </div>
+        </form>
+        <div class="mb-3">
+        <a href="/books">All Books</a>
+        </div>
+    </div>
+</div>

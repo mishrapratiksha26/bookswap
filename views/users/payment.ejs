@@ -1,0 +1,66 @@
+<% layout('layouts/boilerplate') %>
+<div class="col-md-12 text-center md-3">
+    <% layout('layouts/boilerplate') %> 
+
+
+<div class="col d-flex justify-content-center">
+    <% if(currentUser){ %> 
+    <form action="/books/<%=book._id%>/order" method="post" novalidate class="validated-form">
+    <div class="card" style="width: 30rem;">
+        <div class="card-header">
+          Order Summary:
+        </div>
+        <ul class="list-group list-group-flush">
+          <li class="list-group-item"><label for="title">Title:</label>
+            <span type="text" value= "<%= book.title  %>" name="book[title]" required><%= book.title  %></span></li>
+          <li class="list-group-item"> <label for="author">Author:</label>
+            <span type="text" value= "<%= book.author%>" name="book[author]" required><%= book.author%> </span></li>
+          <li class="list-group-item"><label for="genre">Genre:</label>
+            <span type="text" value="<%= book.genre%>" name="book[genre]" required><%= book.genre%></span></li>
+            <li class="list-group-item"> <label for="description">Description:</label>
+                <span type="text" value="<%= book.description%>" name="book[description]" required><%= book.description%></span></li>
+            <li class="list-group-item"> <label for="price">MRP:&#x20b9;</label>
+                <span type="text" value="<%= book.price%>" name="book[price]" required><%= book.price%></span> </li>
+                
+        </ul>
+       
+      </div>
+    </form>
+    <% } %> 
+    </div>
+    <button class="btn btn-success my-2" id="rzp-button1">Proceed to Pay</button>
+    <div><a href="/books/<%=book._id%>/order">Edit details</a></div>
+</div>
+
+
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+var options = {
+    "key": "rzp_live_k2KOJW8xRAQ7ci", // Enter the Key ID generated from the Dashboard
+    // "amount": "1", // Amount is in currency subunits. Default currency is INR. Hence, 50000 refers to 50000 paise
+    // "currency": "INR",
+    "name": "BooksForBooks",
+    "description": "Test Transaction",
+    "image": "https://example.com/your_logo",
+    // "order_id": "", //This is a sample Order ID. Pass the `id` obtained in the response of Step 1
+    "callback_url": "https://eneqd3r9zrjok.x.pipedream.net/",
+    "prefill": {
+        "name":"<%=user.username%>",
+        "email": "<%=user.email%>"
+        
+    },
+    // "notes": {
+    //     "address": "Razorpay Corporate Office"
+    // },
+    // "theme": {
+    //     "color": "#3399cc"
+    // }
+};
+
+var rzp1 = new Razorpay(options);
+document.getElementById('rzp-button1').onclick = function(e){
+    rzp1.open();
+    e.preventDefault();
+}
+</script>
+
