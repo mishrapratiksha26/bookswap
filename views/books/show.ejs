@@ -1,123 +1,219 @@
-<%layout('layouts/boilerplate')%>
+<% layout('layouts/boilerplate') %>
+
+<!-- Google Fonts & Custom Styles -->
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+
 <style>
-    .card-img-top {
-      width: 100%;
-      height: 30vw;
-      object-fit: cover;
+  body {
+    font-family: 'Poppins', sans-serif;
+    background: linear-gradient(135deg, #f4f6f8, #e8f5ee);
+    min-height: 100vh;
   }
-  
-  </style>
 
-<div class="row">
-    <div class="col-6">
-        <div id="bookCarousel" class="carousel slide" data-ride="carousel">
-            <div class="carousel-inner">
-                <% book.images.forEach((img, i) => {  %>
-                <div class="carousel-item <%= i === 0 ? 'active' : ''%>">
-                    <img src="<%= img.url%>" class="card-img-top d-block w-100" alt="">
-                </div>
-                <% }) %>
+  .container {
+    max-width: 1150px;
+  }
 
+  .book-section {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2rem;
+  }
+
+  /* Book Card */
+  .book-card {
+    flex: 1 1 48%;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+    overflow: hidden;
+    padding: 1.5rem;
+  }
+
+  .carousel-inner {
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .card-img-top {
+    width: 100%;
+    height: 380px;
+    object-fit: cover;
+    border-radius: 12px;
+    border: 1px solid #e0e0e0;
+  }
+
+  .book-title {
+    font-size: 1.7rem;
+    font-weight: 600;
+    color: #222;
+    margin-top: 1rem;
+    text-align: center;
+  }
+
+  .book-info p {
+    margin: 0.5rem 0;
+    color: #444;
+    font-size: 0.95rem;
+  }
+
+  /* Buttons */
+  .btn-gradient {
+    background: linear-gradient(90deg, #198754, #34c759);
+    color: #fff !important;
+    border: none;
+    padding: 0.6rem 1.3rem;
+    border-radius: 8px;
+    font-weight: 500;
+    transition: 0.3s ease;
+  }
+  .btn-gradient:hover {
+    background: linear-gradient(90deg, #157347, #28a745);
+    transform: translateY(-2px);
+  }
+
+  .btn-outline-danger {
+    border-radius: 6px;
+  }
+
+  /* Review Section */
+  .review-section {
+    flex: 1 1 48%;
+  }
+
+  .review-form, .review-list {
+    background: #fff;
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+  }
+
+  .review-form h4 {
+    font-weight: 600;
+    color: #222;
+    margin-bottom: 1rem;
+  }
+
+  .review-card {
+    background: #f8faf9;
+    border-left: 5px solid #34c759;
+    padding: 1rem;
+    border-radius: 10px;
+    margin-bottom: 1rem;
+  }
+
+  .review-card h5 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #198754;
+  }
+
+  .review-card p {
+    color: #333;
+    font-size: 0.95rem;
+  }
+
+  .review-card .card-subtitle {
+    font-size: 0.85rem;
+  }
+
+  /* Responsive */
+  @media (max-width: 992px) {
+    .book-section {
+      flex-direction: column;
+    }
+    .book-card, .review-section {
+      flex: 1 1 100%;
+    }
+  }
+</style>
+
+<div class="container py-5">
+  <div class="book-section">
+    <!-- Book Card -->
+    <div class="book-card">
+      <div id="bookCarousel" class="carousel slide carousel-fade mb-3" data-bs-ride="carousel">
+        <div class="carousel-inner">
+          <% book.images.forEach((img, i) => { %>
+            <div class="carousel-item <%= i === 0 ? 'active' : '' %>">
+              <img src="<%= img.url %>" class="card-img-top d-block w-100" alt="Book image">
             </div>
-            <% if(book.images.length > 1) {%>
-            <a class="carousel-control-prev" href="#bookCarousel" role="button" data-slide="prev">
-                <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-                <span class="sr-only">Previous</span>
-            </a>
-            <a class="carousel-control-next" href="#bookCarousel" role="button" data-slide="next">
-                <span class="carousel-control-next-icon" aria-hidden="true"></span>
-                <span class="sr-only">Next</span>
-            </a>
+          <% }) %>
+        </div>
+        <% if (book.images.length > 1) { %>
+          <button class="carousel-control-prev" type="button" data-bs-target="#bookCarousel" data-bs-slide="prev">
+            <span class="carousel-control-prev-icon"></span>
+          </button>
+          <button class="carousel-control-next" type="button" data-bs-target="#bookCarousel" data-bs-slide="next">
+            <span class="carousel-control-next-icon"></span>
+          </button>
+        <% } %>
+      </div>
+
+      <div class="book-title"><%= book.title %></div>
+      <div class="book-info mt-3">
+        <p><strong>Author:</strong> <%= book.author %></p>
+        <p><strong>Genre:</strong> <%= book.genre %></p>
+        <p><strong>MRP:</strong> ₹<%= book.price %></p>
+        <p><strong>Description:</strong> <%= book.description %></p>
+        <p><strong>Posted by:</strong> <%= book.owner.username %></p>
+      </div>
+
+      <div class="text-center mt-3">
+        <% if (currentUserId && currentUserId.toString() === ownerId.toString()) { %>
+          <a class="btn btn-info me-2" href="/books/<%= book._id %>/edit">Edit</a>
+          <form class="d-inline" action="/books/<%= book._id %>?_method=DELETE" method="POST">
+            <button class="btn btn-danger">Delete</button>
+          </form>
+        <% } else { %>
+          <!-- <a class="btn btn-primary me-2" href="/books/<%= book._id %>/order">Order Now</a> -->
+          <a class="btn btn-gradient mt-2 mt-lg-0" href="/chat/<%= book.owner._id %>">
+            💬 Chat with Owner
+          </a>
+        <% } %>
+      </div>
+    </div>
+
+    <!-- Review Section -->
+    <div class="review-section">
+      <% if (currentUserId) { %>
+        <div class="review-form mb-4">
+          <h4>Leave a Review</h4>
+          <form action="/books/<%= book._id %>/reviews" method="POST">
+            <div class="mb-3">
+              <label for="rating" class="form-label">Rating</label>
+              <input type="range" class="form-range" min="1" max="5" name="review[rating]" id="rating">
+            </div>
+            <div class="mb-3">
+              <label for="body" class="form-label">Review</label>
+              <textarea class="form-control" name="review[body]" id="body" rows="3" required></textarea>
+            </div>
+            <button class="btn btn-gradient">Submit</button>
+          </form>
+        </div>
+      <% } else { %>
+        <div class="alert alert-warning">
+          Login to leave a review: <a href="/login" class="alert-link">Login</a>
+        </div>
+      <% } %>
+
+      <div class="review-list">
+        <% if (book.reviews.length === 0) { %>
+          <p class="text-muted">No reviews yet.</p>
+        <% } %>
+        <% book.reviews.forEach(review => { %>
+          <div class="review-card">
+            <h5>Rating: <%= review.rating %> ⭐</h5>
+            <p><%= review.body %></p>
+            <h6 class="card-subtitle text-muted">By <%= review.author.username %></h6>
+            <% if (currentUserId && review.author._id.toString() === currentUserId.toString()) { %>
+              <form action="/books/<%= book._id %>/reviews/<%= review._id %>?_method=DELETE" method="POST" class="mt-2">
+                <button class="btn btn-sm btn-outline-danger">Delete</button>
+              </form>
             <% } %>
-        </div>
-            <div class="card mb-3">
-                
-          
-                <div class="card-body">
-                    <div class="card-header text-center">
-                        
-                            <b><%= book.title%></b>
-                        
-                     </div>
-                    
-                    <p class="card-text"><b>Author:</b>
-                        <p><%= book.author%></p>
-                    </p>
-                </div>
-                <ul class="list-group list-group-flush">
-                    <li class="list-group-item"><b>Genre:</b><p><%= book.genre%></p>
-                    </li>
-                    <li class="list-group-item"><b>MRP:&#x20b9;</b><p><%= book.price%></p>
-                    </li>
-                    <li class="list-group-item"><b>Description:</b>
-                    <p><%= book.description%></p>
-                    </li>
-                    <li class="list-group-item"><b>Posted by:</b><p><%= book.owner.username%></p>
-                    </li>
-                </ul>
-                <% if(currentUser && book.owner.equals(currentUser._id)){ %> 
-                    <div class="card-body col d-flex justify-content-center">
-                        <a class="card-link btn btn-info" href="/books/<%=book._id%>/edit">Edit</a>
-                        <form class="d-inline" action="/books/<%=book._id%>?_method=DELETE" method="POST">
-                            <button class="btn btn-danger ml-1">Delete</button>
-                        </form>
-                        
-                    </div>
-                    <%} else{ %> 
-                    <a class="card-link btn btn-info" href="/books/<%=book._id%>/order">Order Now</a>
-                    <% } %> 
-            </div>
-
-            <div class="card-footer text-muted">
-                2 days ago
-            </div>
-           
-                </div>
-                <div class="col-6">
-                    <% if(currentUser){ %> 
-                    <h2>Leave a review...</h2>
-                    <form action="/books/<%= book._id  %>/reviews " method="post" class="mb-3 validated-form" novalidate >
-                        <div class="mb-3">
-                            <label for="rating" class="form-label">Rating</label>
-                            <input type="range" classs="form-range" min="1" max="5" name="review[rating]" id="rating">
-                           
-                        </div>
-            
-                        <div class="mb-3">
-                            <label for="body" class="form-label">Review</label>
-                            <textarea class="form-control" name="review[body]" id="body" cols="30" rows="3" required></textarea>
-                            <div class="valid-feedback">
-                                looks good!
-                               </div>
-                        </div>
-                        
-                        <button class="btn btn-success">Submit</button>
-                    </form>
-                    <% } %> 
-                    <%for (let review of book.reviews){  %> 
-                        <div class="card mb-3">
-                        <div class="card-body">
-                            <h5 class="card-title">Rating:<%= review.rating %> </h5>
-                           
-                              Rated: <%=review.rating  %>  stars
-                            </p>
-                            
-                            <p class="card-text">Review:<%= review.body %></p>
-                            <h6 class="card-subtitle mb-3 text-muted">By <%= review.author.username %> </h6>
-                            <% if(currentUser && review.author.equals(currentUser._id)){ %> 
-                            <form action="/books/<%=book._id%>/reviews/<%=review._id%>?_method=DELETE" method="post">
-                        <button class="btn btn-sm btn-danger">Delete</button>
-                        </form>
-                        <% } %> 
-                    </div>
-                    </div>
-                        <%  } %> 
-                   
-                </div>
-                <div>
-                <% if(!currentUser) {%>
-                    <a href="/login">Login to leave a review</a> 
-                    <% } %> 
-                </div>
-            </div>
-        </div>
+          </div>
+        <% }) %>
+      </div>
+    </div>
+  </div>
+</div>

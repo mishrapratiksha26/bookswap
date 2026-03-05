@@ -19,7 +19,8 @@ const UserSchema = new Schema({
         type:String,
         // required:true,
         unique : true
-    }
+    },
+    blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
 });
 
 UserSchema.plugin(passportLocalMongoose);

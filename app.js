@@ -7,13 +7,15 @@ const Joi = require("joi");
 
 const { bookSchema, reviewSchema } = require("./schemas");
 const express = require("express");
-const {cloudinary} =require("./cloudinary")
+const { cloudinary } = require("./cloudinary");
 const ejsMate = require("ejs-mate");
 const catchAsync = require("./utils/catchAsync");
 const ExpressError = require("./utils/ExpressError");
 const User = require("./models/users");
 const Book = require("./models/books");
+
 const Order = require("./models/order");
+const Message = require('./models/message');
 const flash = require("connect-flash");
 const methodOverride = require("method-override");
 const session = require("express-session");
@@ -32,8 +34,12 @@ const { storage } = require("./cloudinary/index");
 const upload = multer({ storage });
 const Review = require("./models/review");
 
+const http = require("http");
+const { Server } = require("socket.io");
+const cors = require("cors");
+
 const dbUrl = process.env.DB_URL || "mongodb://localhost:27017/books";
-// process.env.DB_URL || 
+// process.env.DB_URL ||
 mongoose.connect(dbUrl, {
   useNewUrlParser: true,
   // useCreateIndex: true,
@@ -185,8 +191,6 @@ app.get(
   })
 );
 
-
-
 app.get("/logout", isLoggedIn, function (req, res, next) {
   req.logout(function (err) {
     if (err) {
@@ -212,9 +216,6 @@ app.get("/logout", isLoggedIn, function (req, res, next) {
 //   res.render("/books")
 // }))
 
-
-
-
 app.get("/books/new", isLoggedIn, (req, res) => {
   res.render("books/new");
 });
@@ -229,13 +230,13 @@ app.get(
           path: "author",
         },
       });
-    // console.log("BOOK ISSSSSSSSSSSS", book);
-    // console.log(book.images.url);
-    res.render("books/show", { book });
+
+    const currentUserId = req.user ? req.user._id : null;
+    const ownerId = book.owner._id;
+
+    res.render("books/show", { book, currentUserId, ownerId });
   })
 );
-
-
 
 app.post(
   "/books",
@@ -281,30 +282,27 @@ app.put(
   isAuthor,
   validateBook,
   upload.array("image"),
-  
+
   catchAsync(async (req, res) => {
     // console.log(req.body)
     const { id } = req.params;
     const book = await Book.findByIdAndUpdate(id, { ...req.body.book });
     const imgs = req.files.map((f) => ({ url: f.path, filename: f.filename })); //this is an array and we cant push an entire array in an already existing array bcz of our mongoschema definition hence we break it and push the contents
     book.images.push(...imgs);
-    if(req.body.deleteImages){
-      for (let filename of req.body.deleteImages){
+    if (req.body.deleteImages) {
+      for (let filename of req.body.deleteImages) {
         await cloudinary.uploader.destroy(filename);
       }
-    await book.updateOne({$pull:{images:{filename:{$in:req.body.deleteImages}}}})
-    // console.log(book)
-  }
+      await book.updateOne({
+        $pull: { images: { filename: { $in: req.body.deleteImages } } },
+      });
+      // console.log(book)
+    }
     await book.save();
     req.flash("success", "Successfully updated book!");
     res.redirect(`${book._id}`);
   })
 );
-
-
-
-
-
 
 app.delete(
   "/books/:id",
@@ -337,7 +335,7 @@ app.get(
     const book = await Book.findById(req.params.id);
     const user = req.user;
     console.log(req.user);
-    res.render("users/order", { book, user});
+    res.render("users/order", { book, user });
   })
 );
 
@@ -381,15 +379,134 @@ app.delete(
   })
 );
 
+app.post('/chat/:userId/delete', async (req, res) => {
+  const currentUserId = req.user._id;
+  const chatPartnerId = req.params.userId;
+
+  await Message.deleteMany({
+    $or: [
+      { sender: currentUserId, receiver: chatPartnerId },
+      { sender: chatPartnerId, receiver: currentUserId }
+    ]
+  });
+
+  res.redirect('/chat');
+});
+
+app.post('/chat/:userId/block', async (req, res) => {
+  const currentUserId = req.user._id;
+  const chatPartnerId = req.params.userId;
+
+  await User.findByIdAndUpdate(currentUserId, {
+    $addToSet: { blockedUsers: chatPartnerId }
+  });
+
+  res.redirect('/chat');
+});
+
+app.post('/chat/:userId/unblock', async (req, res) => {
+  const currentUserId = req.user._id;
+  const chatPartnerId = req.params.userId;
+
+  await User.findByIdAndUpdate(currentUserId, {
+    $pull: { blockedUsers: chatPartnerId }
+  });
+
+  res.redirect(`/chat/${chatPartnerId}`);
+});
+
+app.get('/chat/:userId', isLoggedIn, async (req, res) => {
+  const currentUserId = req.user._id;
+  const chatPartnerId = req.params.userId;
+
+  const messages = await Message.find({
+    $or: [{ sender: currentUserId }, { receiver: currentUserId }]
+  }).populate('sender receiver');
+
+  const contactMap = new Map();
+  messages.forEach(msg => {
+    const otherUser = msg.sender._id.toString() === currentUserId.toString()
+      ? msg.receiver
+      : msg.sender;
+    contactMap.set(otherUser._id.toString(), otherUser);
+  });
+
+  const contacts = Array.from(contactMap.values());
+  const chatPartner = await User.findById(chatPartnerId);
+  const chatPartnerBlockedMe = chatPartner.blockedUsers?.includes(currentUserId);
+
+  const chatMessages = await Message.find({
+    $or: [
+      { sender: currentUserId, receiver: chatPartnerId },
+      { sender: chatPartnerId, receiver: currentUserId }
+    ]
+  }).sort({ timestamp: 1 }).populate('sender');
+
+  const user = await User.findById(currentUserId);
+  const isBlocked = user.blockedUsers?.includes(chatPartnerId);
+
+  res.render('chat', {
+    currentUserId,
+    chatPartnerId,
+    chatPartnerName: chatPartner.username,
+    messages: chatMessages,
+    contacts,
+    isBlocked,
+    chatPartnerBlockedMe
+  });
+});
+
+app.get('/chat', isLoggedIn, async (req, res) => {
+  const currentUserId = req.user._id;
+
+  const messages = await Message.find({
+    $or: [{ sender: currentUserId }, { receiver: currentUserId }]
+  }).populate('sender receiver');
+
+  const contactMap = new Map();
+  messages.forEach(msg => {
+    const otherUser = msg.sender._id.toString() === currentUserId.toString()
+      ? msg.receiver
+      : msg.sender;
+    contactMap.set(otherUser._id.toString(), otherUser);
+  });
+
+  const contacts = Array.from(contactMap.values());
+  const chatPartner = contacts[0];
+  const chatPartnerBlockedMe = chatPartner?.blockedUsers?.includes(currentUserId);
+  let chatMessages = [];
+  let isBlocked = false;
+
+  if (chatPartner) {
+    chatMessages = await Message.find({
+      $or: [
+        { sender: currentUserId, receiver: chatPartner._id },
+        { sender: chatPartner._id, receiver: currentUserId }
+      ]
+    }).sort({ timestamp: 1 }).populate('sender');
+
+    const user = await User.findById(currentUserId);
+    isBlocked = user.blockedUsers?.includes(chatPartner._id);
+  }
+
+  res.render('chat', {
+    currentUserId,
+    chatPartnerId: chatPartner?._id || null,
+    chatPartnerName: chatPartner?.username || '',
+    messages: chatMessages,
+    contacts,
+    isBlocked,
+    chatPartnerBlockedMe
+  });
+});
+
+
 // app.get('/books/search', async (req, res) => {
 //   const { bookName } = req.query;
 //   const books = await Book.find({ $text: { $search: { title: bookName } } });
 //   // res.render('restaurants', { restaurants });
 //   console.log("SEARCHED FOR",books)
 // })
-
-
-
 
 app.get("/", (req, res) => {
   res.render("home");
@@ -405,7 +522,35 @@ app.use((err, req, res, next) => {
   res.status(statusCode).render("error", { err });
 });
 
-const port = process.env.PORT || 3000
-app.listen(port, () => {
-  console.log(`Serving on port ${port}`);
+
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: "*" }
+});
+const port = process.env.PORT || 3000;
+
+server.listen(port, () => {
+  console.log(`Server running on port ${port}`);
+});
+
+io.on("connection", (socket) => {
+  console.log("User connected:", socket.id);
+
+socket.on("sendMessage", async ({ senderId, receiverId, message }) => {
+  try {
+    const newMsg = new Message({ sender: senderId, receiver: receiverId, message });
+    await newMsg.save();
+
+    const receiver = await User.findById(receiverId);
+    if (!receiver.blockedUsers?.includes(senderId)) {
+      io.emit("receiveMessage", { senderId, receiverId, message });
+    }
+  } catch (err) {
+    console.error("Error sending message:", err);
+  }
+});
+
+  socket.on("disconnect", () => {
+    console.log("User disconnected:", socket.id);
+  });
 });

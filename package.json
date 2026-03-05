@@ -16,12 +16,14 @@
     "cloudinary": "^1.32.0",
     "connect-flash": "^0.1.1",
     "connect-mongo": "^4.6.0",
+    "cors": "^2.8.5",
     "dotenv": "^16.0.3",
     "ejs": "^3.1.8",
     "ejs-mate": "^4.0.0",
     "express": "^4.18.1",
     "express-session": "^1.17.3",
     "joi": "^17.6.4",
+    "jsonwebtoken": "^9.0.2",
     "method-override": "^3.0.0",
     "mongo-sanitize": "^1.1.0",
     "mongoose": "^6.7.5",
@@ -32,7 +34,8 @@
     "passport": "^0.6.0",
     "passport-local-mongoose": "^7.1.2",
     "session-file-store": "^1.5.0",
-    "socket.io": "^4.5.3"
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1"
   },
   "repository": {
     "type": "git",

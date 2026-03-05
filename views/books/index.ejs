@@ -1,58 +1,144 @@
-<% layout('layouts/boilerplate') %> 
+<% layout('layouts/boilerplate') %>
+
 <style>
+  body {
+    font-family: 'Poppins', sans-serif;
+    background: linear-gradient(135deg, #f3f7fa, #e2f4ea);
+    background-attachment: fixed;
+    margin: 0;
+    padding: 0;
+    color: #1e1f31;
+  }
+
+  .page-title {
+    font-weight: 700;
+    font-size: 2.5rem;
+    text-align: center;
+    margin: 2.5rem 0 3.5rem;
+    color: #2f3336;
+    letter-spacing: 1px;
+    position: relative;
+  }
+
+  .page-title::after {
+    content: '';
+    width: 70px;
+    height: 4px;
+    background: #2f3336;
+    position: absolute;
+    bottom: -12px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: 2px;
+  }
+
+  .book-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    padding: 0 1.5rem 4rem;
+    max-width: 1300px;
+    margin: 0 auto;
+  }
+
+  .card {
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.25);
+  }
+
   .card-img-top {
     width: 100%;
-    height: 20vw;
+    height: 240px;
     object-fit: cover;
-    
-}
+  }
 
+  .card-body {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    flex-grow: 1;
+  }
 
+  .card-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    text-align: center;
+    color: #222;
+    margin-bottom: 0.5rem;
+  }
+
+  .card-text {
+    font-size: 0.95rem;
+    color: #444;
+    line-height: 1.6;
+    text-align: justify;
+  }
+
+  .description-snippet {
+    max-height: 3.9em;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .description-snippet::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 1.3em;
+    background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.9));
+  }
+
+  .btn-primary {
+    background-color: #00a98f;
+    border: none;
+    border-radius: 25px;
+    padding: 10px 22px;
+    font-weight: 600;
+    color: white;
+    text-decoration: none;
+    text-align: center;
+    display: inline-block;
+    margin-top: 1.2rem;
+    transition: all 0.3s ease;
+  }
+
+  .btn-primary:hover {
+    background-color: #008f7a;
+    transform: scale(1.06);
+  }
 </style>
 
-<div class="container">
-   <h1><p><b>Books</b></p></h1>
- 
-      
-    
-            <% for(let book of books){ %>
-        <div class="card mb-3 mt-2">
-       <div class="row" >
+<h1 class="page-title">Discover Books</h1>
 
+<div class="book-grid">
+  <% for (let book of books) { %>
+    <div class="card">
+      <% if (book.images.length) { %>
+        <img class="card-img-top" alt="Book cover" src="<%= book.images[0].url %>">
+      <% } else { %>
+        <img class="card-img-top" alt="Default cover" src="https://res.cloudinary.com/douqbebwk/image/upload/v1600103881/YelpCamp/lz8jjv2gyynjil7lswf4.png">
+      <% } %>
 
-        <div class="col-md-4">
-          <%if(book.images.length) {%>
-          <img class="card-img-top img-fluid" alt="" src="<%=book.images[0].url%>">
-          <% }else {%>
-          <img class="card-img-top img-fluid" alt=""
-              src="https://res.cloudinary.com/douqbebwk/image/upload/v1600103881/YelpCamp/lz8jjv2gyynjil7lswf4.png">
-          <% } %>
-      </div>
-
-
-
-        
-           
-            <div class="col-md-8">
-        <div class="card-body">
-          
-          
-                        
-          <h5 class="card-title"><b><%= book.title%></b></h5>
-        
-     
-          <p class="card-text"><%= book.description%></p>
-        
-       
-      
-          <a href="/books/<%=book._id %>" class="card-link btn btn-primary">View</a>
-          <!-- <a href="/books/<%=book._id%>/order" class="card-link btn btn-info ml-auto">Buy</a> -->
-     
+      <div class="card-body">
+        <div>
+          <h5 class="card-title"><%= book.title %></h5>
+          <p class="card-text description-snippet"><%= book.description %></p>
+        </div>
+        <a href="/books/<%= book._id %>" class="btn-primary">View Details</a>
       </div>
     </div>
+  <% } %>
 </div>
-</div>
-      <% } %> 
-    </div>
-
-    
