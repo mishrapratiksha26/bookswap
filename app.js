@@ -4,7 +4,7 @@ if (process.env.NODE_ENV !== "production") {
 const mongoose = require("mongoose");
 const path = require("path");
 const Joi = require("joi");
-
+const BorrowRequest = require("./models/borrowrequest");
 const { bookSchema, reviewSchema } = require("./schemas");
 const express = require("express");
 const { cloudinary } = require("./cloudinary");
@@ -50,7 +50,7 @@ mongoose.connect(dbUrl, {
 const db = mongoose.connection;
 db.on("error", console.error.bind(console, "connection error:"));
 db.once("open", () => {
-  console.log("Database connected");
+  console.log("Database connected", dbUrl);
 });
 
 const app = express();
@@ -111,16 +111,60 @@ app.use((req, res, next) => {
   res.locals.error = req.flash("error");
   next();
 });
-app.get(
-  "/books",
-  catchAsync(async (req, res) => {
+
+app.get("/books", catchAsync(async (req, res) => {
+    const { query } = req.query;
+    let searchResults = [];
+    let personalRecommendations = [];
+    
+    if (query && query.trim() !== "") {
+        const response = await fetch(`${process.env.AI_SERVICE_URL}/search`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query, top_k: 5 })
+        });
+        const data = await response.json();
+        searchResults = data.results;
+    }
+
+    if (req.user) {
+        try {
+            const user = await User.findById(req.user._id);
+            if (user.borrowedBooks && user.borrowedBooks.length > 0) {
+                const populatedUser = await User.findById(req.user._id).populate('borrowedBooks');
+                const Review = require('./models/review');
+                
+                const booksWithRatings = await Promise.all(
+                    populatedUser.borrowedBooks.map(async (book) => {
+                        const review = await Review.findOne({ 
+                            author: req.user._id,
+                            _id: { $in: book.reviews }
+                        });
+                        return {
+                            book_id: book._id.toString(),
+                            rating: review ? review.rating : 1
+                        };
+                    })
+                );
+                console.log("booksWithRatings:", booksWithRatings);
+                const response = await fetch(`${process.env.AI_SERVICE_URL}/recommend-personal`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ books: booksWithRatings, top_k: 5 })
+                });
+                const data = await response.json();
+                personalRecommendations = data.results;
+                console.log("Personal recommendations data:", data);
+                personalRecommendations = data.results;
+              }
+        } catch (err) {
+            console.log("Personal recommendations failed:", err);
+        }
+    }
+    
     const books = await Book.find({});
-    console.log(books.images);
-    console.log(books);
-    //   console.log(currentUser);
-    res.render("books/index", { books });
-  })
-);
+    res.render("books/index", { books, searchResults, query: query || "", personalRecommendations });
+}));
 
 app.get("/register", (req, res) => {
   res.render("users/register");
@@ -184,10 +228,26 @@ app.get(
   isLoggedIn,
   catchAsync(async (req, res, next) => {
     const user = req.user;
-
-    const books = await Book.find({ owner: `${user._id}` });
-    // console.log("library is", books);
-    res.render("users/profile", { user, books });
+    const books = await Book.find({ owner: user._id });
+    const borrowRequests = await BorrowRequest.find({ 
+      owner: user._id, 
+      status: 'pending' 
+    }).populate('book').populate('borrower');
+    const myBorrowRequests = await BorrowRequest.find({ 
+      borrower: user._id 
+    }).populate('book').populate('owner');
+    const borrowedBooks = await Book.find({ 
+      _id: { $in: user.borrowedBooks } 
+    });
+    const lentBooks = await Book.find({
+      owner: user._id,
+      available: false
+    });
+    const activeLentRequests = await BorrowRequest.find({
+      owner: user._id,
+      status: 'approved'
+    }).populate('book').populate('borrower');
+    res.render("users/profile", { user, books, borrowRequests, myBorrowRequests, borrowedBooks, lentBooks, activeLentRequests });
   })
 );
 
@@ -201,24 +261,10 @@ app.get("/logout", isLoggedIn, function (req, res, next) {
   });
 });
 
-// app.get("/books/search",(req,res)=>{
-//   console.log(req.query)
-//   res.render("books/search")
-// })
-// app.post("/books/search?search=:query",(req,res)=>{
-
-//   console.log("211111111111111111111",req.query)
-// })
-// app.get("/books/search?search=:query",catchAsync(async(req,res)=>{
-//   const books = await Book.find({});
-//   console.log(books)
-//   const book =await book.find({$pull:{query:{title:{$in:req.body}}}})
-//   res.render("/books")
-// }))
-
 app.get("/books/new", isLoggedIn, (req, res) => {
   res.render("books/new");
 });
+
 app.get(
   "/books/:id",
   catchAsync(async (req, res) => {
@@ -231,10 +277,35 @@ app.get(
         },
       });
 
-    const currentUserId = req.user ? req.user._id : null;
-    const ownerId = book.owner._id;
+    let similarBooks = [];
+    try {
+      const response = await fetch(`${process.env.AI_SERVICE_URL}/similar-books`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ book_id: book._id, top_k: 5 })
+      });
+      const data = await response.json();
+      similarBooks = data.results;
+    } catch (err) {
+      console.log("Similar books failed:", err);
+    }
 
-    res.render("books/show", { book, currentUserId, ownerId });
+    const activeBorrowRequest = await BorrowRequest.findOne({ 
+      book: req.params.id, 
+      status: 'approved' 
+    }).populate('borrower');
+
+    const currentUserId = req.user ? req.user._id : null;
+
+    const userBorrowRequest = currentUserId ? await BorrowRequest.findOne({
+      book: req.params.id,
+      borrower: currentUserId,
+      status: { $in: ['pending', 'approved'] }
+    }) : null;
+
+    const ownerId = book.owner._id;
+    
+    res.render("books/show", { book, currentUserId, ownerId, similarBooks, activeBorrowRequest, userBorrowRequest });
   })
 );
 
@@ -250,6 +321,12 @@ app.post(
     book.owner = req.user._id;
     // console.log(req.user);
     await book.save();
+    // async embedding - fire and forget
+    fetch(`${process.env.AI_SERVICE_URL}/embed-book`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ book_id: book._id.toString() })
+    }).catch(err => console.log("Embedding failed:", err));
     // console.log(book);
     // console.log("book saved");
     req.flash("success", "Book posted!");
@@ -273,6 +350,23 @@ app.get(
     }
 
     res.render("books/edit", { book });
+  })
+);
+
+app.post(
+  "/books/:id/borrow",
+  isLoggedIn,
+  catchAsync(async (req, res) => {
+    const book = await Book.findById(req.params.id);
+    const borrowRequest = new BorrowRequest({
+      book: book._id,
+      borrower: req.user._id,
+      owner: book.owner,
+      returnDate: req.body.returnDate
+    });
+    await borrowRequest.save();
+    req.flash("success", "Borrow request submitted!");
+    res.redirect(`/books/${book._id}`);
   })
 );
 
@@ -393,6 +487,90 @@ app.post('/chat/:userId/delete', async (req, res) => {
   res.redirect('/chat');
 });
 
+app.post('/borrow/:requestId/accept', isLoggedIn, catchAsync(async (req, res) => {
+  const { requestId } = req.params;
+  const borrowRequest = await BorrowRequest.findById(requestId).populate('book').populate('borrower');
+  
+  if (!borrowRequest) {
+    req.flash('error', 'Borrow request not found');
+    return res.redirect('/profile');
+  }
+  
+  if (borrowRequest.owner.toString() !== req.user._id.toString()) {
+    req.flash('error', 'You are not authorized to approve this request');
+    return res.redirect('/profile');
+  }
+  
+  borrowRequest.status = 'approved';
+  await borrowRequest.save();
+  
+  await User.findByIdAndUpdate(borrowRequest.borrower, {
+    $push: { borrowedBooks: borrowRequest.book._id }
+  });
+  
+  await Book.findByIdAndUpdate(borrowRequest.book._id, {
+    $set: { available: false }
+  });
+
+  const suggestion = `Hi ${borrowRequest.borrower.username}! Your borrow request for "${borrowRequest.book.title}" has been accepted. Let's decide where to meet to exchange the book!`;
+  res.redirect(`/chat/${borrowRequest.borrower._id}?suggestion=${encodeURIComponent(suggestion)}`);
+}));
+
+app.post('/borrow/:requestId/reject', isLoggedIn, catchAsync(async (req, res) => {
+  const { requestId } = req.params;
+  const borrowRequest = await BorrowRequest.findById(requestId);
+  
+  if (!borrowRequest) {
+    req.flash('error', 'Borrow request not found');
+    return res.redirect('/profile');
+  }
+  
+  if (borrowRequest.owner.toString() !== req.user._id.toString()) {
+    req.flash('error', 'You are not authorized to reject this request');
+    return res.redirect('/profile');
+  }
+  
+  borrowRequest.status = 'rejected';
+  await borrowRequest.save();
+  
+  req.flash('success', 'Borrow request rejected.');
+  res.redirect('/profile');
+}));
+
+app.post('/borrow/:requestId/return', isLoggedIn, catchAsync(async (req, res) => {
+  const { requestId } = req.params;
+  const borrowRequest = await BorrowRequest.findById(requestId).populate('book');
+
+  if (!borrowRequest) {
+    req.flash('error', 'Borrow request not found');
+    return res.redirect('/profile');
+  }
+
+  if (borrowRequest.owner.toString() !== req.user._id.toString()) {
+    req.flash('error', 'Only the book owner can mark a book as returned');
+    return res.redirect('/profile');
+  }
+
+  if (borrowRequest.status !== 'approved') {
+    req.flash('error', 'This book is not currently borrowed');
+    return res.redirect('/profile');
+  }
+
+  borrowRequest.status = 'returned';
+  await borrowRequest.save();
+
+  await Book.findByIdAndUpdate(borrowRequest.book._id, {
+    $set: { available: true }
+  });
+
+  await User.findByIdAndUpdate(borrowRequest.borrower, {
+    $pull: { borrowedBooks: borrowRequest.book._id }
+  });
+
+  req.flash('success', 'Book marked as returned!');
+  res.redirect('/profile');
+}));
+
 app.post('/chat/:userId/block', async (req, res) => {
   const currentUserId = req.user._id;
   const chatPartnerId = req.params.userId;
@@ -499,14 +677,6 @@ app.get('/chat', isLoggedIn, async (req, res) => {
     chatPartnerBlockedMe
   });
 });
-
-
-// app.get('/books/search', async (req, res) => {
-//   const { bookName } = req.query;
-//   const books = await Book.find({ $text: { $search: { title: bookName } } });
-//   // res.render('restaurants', { restaurants });
-//   console.log("SEARCHED FOR",books)
-// })
 
 app.get("/", (req, res) => {
   res.render("home");

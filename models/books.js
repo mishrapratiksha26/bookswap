@@ -42,7 +42,8 @@ const BookSchema = new Schema({
    reviews:[{
       type:Schema.Types.ObjectId,
       ref:'Review'
-   }]
+   }],
+   available: { type: Boolean, default: true }
 
 });
 

@@ -20,7 +20,8 @@ const UserSchema = new Schema({
         // required:true,
         unique : true
     },
-    blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+    blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    borrowedBooks: [{ type: Schema.Types.ObjectId, ref: 'Books' }]
 });
 
 UserSchema.plugin(passportLocalMongoose);

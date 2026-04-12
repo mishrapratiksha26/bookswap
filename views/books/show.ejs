@@ -1,6 +1,5 @@
 <% layout('layouts/boilerplate') %>
 
-<!-- Google Fonts & Custom Styles -->
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
 
 <style>
@@ -9,18 +8,8 @@
     background: linear-gradient(135deg, #f4f6f8, #e8f5ee);
     min-height: 100vh;
   }
-
-  .container {
-    max-width: 1150px;
-  }
-
-  .book-section {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 2rem;
-  }
-
-  /* Book Card */
+  .container { max-width: 1150px; }
+  .book-section { display: flex; flex-wrap: wrap; gap: 2rem; }
   .book-card {
     flex: 1 1 48%;
     background: #fff;
@@ -29,12 +18,7 @@
     overflow: hidden;
     padding: 1.5rem;
   }
-
-  .carousel-inner {
-    border-radius: 12px;
-    overflow: hidden;
-  }
-
+  .carousel-inner { border-radius: 12px; overflow: hidden; }
   .card-img-top {
     width: 100%;
     height: 380px;
@@ -42,7 +26,6 @@
     border-radius: 12px;
     border: 1px solid #e0e0e0;
   }
-
   .book-title {
     font-size: 1.7rem;
     font-weight: 600;
@@ -50,14 +33,7 @@
     margin-top: 1rem;
     text-align: center;
   }
-
-  .book-info p {
-    margin: 0.5rem 0;
-    color: #444;
-    font-size: 0.95rem;
-  }
-
-  /* Buttons */
+  .book-info p { margin: 0.5rem 0; color: #444; font-size: 0.95rem; }
   .btn-gradient {
     background: linear-gradient(90deg, #198754, #34c759);
     color: #fff !important;
@@ -71,29 +47,15 @@
     background: linear-gradient(90deg, #157347, #28a745);
     transform: translateY(-2px);
   }
-
-  .btn-outline-danger {
-    border-radius: 6px;
-  }
-
-  /* Review Section */
-  .review-section {
-    flex: 1 1 48%;
-  }
-
+  .btn-outline-danger { border-radius: 6px; }
+  .review-section { flex: 1 1 48%; }
   .review-form, .review-list {
     background: #fff;
     border-radius: 16px;
     padding: 1.5rem;
     box-shadow: 0 6px 20px rgba(0,0,0,0.08);
   }
-
-  .review-form h4 {
-    font-weight: 600;
-    color: #222;
-    margin-bottom: 1rem;
-  }
-
+  .review-form h4 { font-weight: 600; color: #222; margin-bottom: 1rem; }
   .review-card {
     background: #f8faf9;
     border-left: 5px solid #34c759;
@@ -101,35 +63,18 @@
     border-radius: 10px;
     margin-bottom: 1rem;
   }
-
-  .review-card h5 {
-    font-size: 1rem;
-    font-weight: 600;
-    color: #198754;
-  }
-
-  .review-card p {
-    color: #333;
-    font-size: 0.95rem;
-  }
-
-  .review-card .card-subtitle {
-    font-size: 0.85rem;
-  }
-
-  /* Responsive */
+  .review-card h5 { font-size: 1rem; font-weight: 600; color: #198754; }
+  .review-card p { color: #333; font-size: 0.95rem; }
+  .review-card .card-subtitle { font-size: 0.85rem; }
   @media (max-width: 992px) {
-    .book-section {
-      flex-direction: column;
-    }
-    .book-card, .review-section {
-      flex: 1 1 100%;
-    }
+    .book-section { flex-direction: column; }
+    .book-card, .review-section { flex: 1 1 100%; }
   }
 </style>
 
 <div class="container py-5">
   <div class="book-section">
+
     <!-- Book Card -->
     <div class="book-card">
       <div id="bookCarousel" class="carousel slide carousel-fade mb-3" data-bs-ride="carousel">
@@ -150,29 +95,67 @@
         <% } %>
       </div>
 
-      <div class="book-title"><%= book.title %></div>
-      <div class="book-info mt-3">
-        <p><strong>Author:</strong> <%= book.author %></p>
-        <p><strong>Genre:</strong> <%= book.genre %></p>
-        <p><strong>MRP:</strong> ₹<%= book.price %></p>
-        <p><strong>Description:</strong> <%= book.description %></p>
-        <p><strong>Posted by:</strong> <%= book.owner.username %></p>
-      </div>
+<div class="book-title"><%= book.title %></div>
+<div class="book-info mt-3">
+  <p><strong>Author:</strong> <%= book.author %></p>
+  <p><strong>Genre:</strong> <%= book.genre %></p>
+  <p><strong>MRP:</strong> ₹<%= book.price %></p>
+  <p><strong>Description:</strong> <%= book.description %></p>
+  <p><strong>Posted by:</strong> <%= book.owner.username %></p>
+</div>
 
-      <div class="text-center mt-3">
-        <% if (currentUserId && currentUserId.toString() === ownerId.toString()) { %>
-          <a class="btn btn-info me-2" href="/books/<%= book._id %>/edit">Edit</a>
-          <form class="d-inline" action="/books/<%= book._id %>?_method=DELETE" method="POST">
-            <button class="btn btn-danger">Delete</button>
-          </form>
-        <% } else { %>
-          <!-- <a class="btn btn-primary me-2" href="/books/<%= book._id %>/order">Order Now</a> -->
-          <a class="btn btn-gradient mt-2 mt-lg-0" href="/chat/<%= book.owner._id %>">
-            💬 Chat with Owner
-          </a>
-        <% } %>
-      </div>
+<div class="text-center mt-3">
+  <% if (currentUserId && currentUserId.toString() === ownerId.toString()) { %>
+    <a class="btn btn-info me-2" href="/books/<%= book._id %>/edit">Edit</a>
+    <form class="d-inline" action="/books/<%= book._id %>?_method=DELETE" method="POST">
+      <button class="btn btn-danger">Delete</button>
+    </form>
+
+  <% } else if (currentUserId) { %>
+    <% if (userBorrowRequest && userBorrowRequest.status === 'pending') { %>
+      <span class="badge bg-warning mt-2 p-2" style="font-size:0.9rem;">⏳ Borrow request already submitted</span>
+
+    <% } else if (userBorrowRequest && userBorrowRequest.status === 'approved') { %>
+      <span class="badge bg-success mt-2 p-2 d-block mb-2" style="font-size:0.9rem;">✅ You are borrowing this book</span>
+      <a class="btn btn-gradient mt-2" href="/chat/<%= book.owner._id %>">
+        💬 Chat with Owner to arrange pickup
+      </a>
+
+    <% } else if (book.available) { %>
+      <form action="/books/<%= book._id %>/borrow" method="POST">
+        <div id="borrowDateSection" style="display:none;" class="mb-2 text-start">
+          <label class="form-label">Return Date (optional)</label>
+          <input type="date" name="returnDate" class="form-control">
+        </div>
+        <button type="button" id="requestBorrowBtn" class="btn btn-gradient mt-2"
+          onclick="
+            document.getElementById('borrowDateSection').style.display='block';
+            document.getElementById('requestBorrowBtn').style.display='none';
+            document.getElementById('confirmBorrowBtn').style.display='inline-block';
+          ">
+          Request to Borrow
+        </button>
+        <button type="submit" id="confirmBorrowBtn" class="btn btn-gradient mt-2" style="display:none;">
+          Confirm Request
+        </button>
+      </form>
+
+    <% } else { %>
+      <% if (activeBorrowRequest && activeBorrowRequest.returnDate) { %>
+        <span class="badge bg-danger mt-2 p-2">Unavailable until <%= new Date(activeBorrowRequest.returnDate).toLocaleDateString() %></span>
+      <% } else { %>
+        <span class="badge bg-danger mt-2 p-2">Currently Unavailable</span>
+      <% } %>
+    <% } %>
+
+  <% } else { %>
+    <div class="alert alert-warning mt-2">
+      <a href="/login" class="alert-link">Login</a> to borrow this book
     </div>
+  <% } %>
+</div>
+</div>
+<!-- End Book Card -->
 
     <!-- Review Section -->
     <div class="review-section">
@@ -215,5 +198,28 @@
         <% }) %>
       </div>
     </div>
+    <!-- End Review Section -->
+
   </div>
+
+  <!-- Similar Books -->
+  <% if (similarBooks && similarBooks.length > 0) { %>
+    <div class="mt-5">
+      <h3 style="font-weight: 600; color: #222;">You might also like</h3>
+      <div style="display: flex; gap: 1.5rem; flex-wrap: wrap; margin-top: 1rem;">
+        <% similarBooks.forEach(b => { %>
+          <a href="/books/<%= b._id %>" style="text-decoration: none; color: inherit;">
+            <div style="background: #fff; border-radius: 16px; box-shadow: 0 6px 20px rgba(0,0,0,0.08); padding: 1rem; width: 180px;">
+              <% if (b.images && b.images.length > 0) { %>
+                <img src="<%= b.images[0].url %>" style="width: 100%; height: 200px; object-fit: cover; border-radius: 10px;">
+              <% } %>
+              <p style="font-weight: 600; margin-top: 0.5rem; font-size: 0.9rem;"><%= b.title %></p>
+              <p style="color: #666; font-size: 0.8rem;"><%= b.author %></p>
+            </div>
+          </a>
+        <% }) %>
+      </div>
+    </div>
+  <% } %>
+
 </div>

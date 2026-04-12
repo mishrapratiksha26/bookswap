@@ -32,6 +32,62 @@
     border-radius: 2px;
   }
 
+  .search-container {
+    max-width: 600px;
+    margin: 0 auto 3rem;
+    padding: 0 1.5rem;
+    display: flex;
+    gap: 0.75rem;
+  }
+
+  .search-input {
+    flex: 1;
+    padding: 12px 20px;
+    border-radius: 25px;
+    border: 2px solid #00a98f;
+    font-size: 1rem;
+    font-family: 'Poppins', sans-serif;
+    outline: none;
+    transition: box-shadow 0.3s ease;
+  }
+
+  .search-input:focus {
+    box-shadow: 0 0 0 3px rgba(0, 169, 143, 0.2);
+  }
+
+  .search-btn {
+    padding: 12px 24px;
+    background-color: #00a98f;
+    color: white;
+    border: none;
+    border-radius: 25px;
+    font-weight: 600;
+    font-family: 'Poppins', sans-serif;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .search-btn:hover {
+    background-color: #008f7a;
+    transform: scale(1.06);
+  }
+
+  .section-label {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #00a98f;
+    max-width: 1300px;
+    margin: 0 auto 1.5rem;
+    padding: 0 1.5rem;
+  }
+
+  .divider {
+    max-width: 1300px;
+    margin: 3rem auto;
+    border: none;
+    border-top: 2px dashed #ccc;
+  }
+
   .book-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -40,6 +96,41 @@
     max-width: 1300px;
     margin: 0 auto;
   }
+
+  .rec-grid {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    padding: 0 1.5rem 2rem;
+    max-width: 1300px;
+    margin: 0 auto;
+  }
+
+  .rec-card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+    padding: 1rem;
+    width: 180px;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.2s;
+  }
+
+  .rec-card:hover {
+    transform: translateY(-4px);
+  }
+
+  .rec-card img {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    border-radius: 10px;
+  }
+
+  .rec-card p { margin: 0; }
+  .rec-card .rec-title { font-weight: 600; margin-top: 0.5rem; font-size: 0.9rem; }
+  .rec-card .rec-author { color: #666; font-size: 0.8rem; }
 
   .card {
     background: rgba(255, 255, 255, 0.8);
@@ -123,6 +214,61 @@
 
 <h1 class="page-title">Discover Books</h1>
 
+<!-- Search Bar -->
+<form class="search-container" action="/books" method="GET">
+  <input 
+    class="search-input" 
+    type="text" 
+    name="query" 
+    placeholder="Search by meaning... try 'inspirational story' or 'thrilling mystery'" 
+    value="<%= query %>"
+  >
+  <button class="search-btn" type="submit">Search</button>
+</form>
+
+<!-- Search Results -->
+<% if (searchResults && searchResults.length > 0) { %>
+  <p class="section-label">✨ Best matches for "<%= query %>"</p>
+  <div class="book-grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 340px));">
+    <% for (let book of searchResults) { %>
+      <div class="card">
+        <% if (book.images && book.images.length) { %>
+          <img class="card-img-top" alt="Book cover" src="<%= book.images[0].url %>">
+        <% } else { %>
+          <img class="card-img-top" alt="Default cover" src="https://res.cloudinary.com/douqbebwk/image/upload/v1600103881/YelpCamp/lz8jjv2gyynjil7lswf4.png">
+        <% } %>
+        <div class="card-body">
+          <div>
+            <h5 class="card-title"><%= book.title %></h5>
+            <p class="card-text description-snippet"><%= book.description %></p>
+          </div>
+          <a href="/books/<%= book._id %>" class="btn-primary">View Details</a>
+        </div>
+      </div>
+    <% } %>
+  </div>
+  <hr class="divider">
+<% } %>
+
+<!-- Personalised Recommendations -->
+<% if (personalRecommendations && personalRecommendations.length > 0) { %>
+  <p class="section-label">🎯 Recommended for You</p>
+  <div class="rec-grid">
+    <% personalRecommendations.forEach(b => { %>
+      <a href="/books/<%= b._id %>" class="rec-card">
+        <% if (b.images && b.images.length > 0) { %>
+          <img src="<%= b.images[0].url %>" alt="<%= b.title %>">
+        <% } %>
+        <p class="rec-title"><%= b.title %></p>
+        <p class="rec-author"><%= b.author %></p>
+      </a>
+    <% }) %>
+  </div>
+  <hr class="divider">
+<% } %>
+
+<!-- All Books -->
+<p class="section-label">All Books</p>
 <div class="book-grid">
   <% for (let book of books) { %>
     <div class="card">
@@ -131,7 +277,6 @@
       <% } else { %>
         <img class="card-img-top" alt="Default cover" src="https://res.cloudinary.com/douqbebwk/image/upload/v1600103881/YelpCamp/lz8jjv2gyynjil7lswf4.png">
       <% } %>
-
       <div class="card-body">
         <div>
           <h5 class="card-title"><%= book.title %></h5>
