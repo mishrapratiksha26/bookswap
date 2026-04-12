@@ -28,6 +28,7 @@ const {
   validateReview,
   validateBook,
   isAuthor,
+  isReviewAuthor,
 } = require("./middleware");
 const multer = require("multer");
 const { storage } = require("./cloudinary/index");
@@ -401,6 +402,7 @@ app.put(
 app.delete(
   "/books/:id",
   isLoggedIn,
+  isAuthor,
   catchAsync(async (req, res) => {
     const { id } = req.params;
     const book = await Book.findByIdAndDelete(id);
@@ -464,10 +466,12 @@ app.post(
 
 app.delete(
   "/books/:id/reviews/:reviewId",
+  isLoggedIn,
+  isReviewAuthor,
   catchAsync(async (req, res) => {
     const { id, reviewId } = req.params;
-    Book.findByIdAndUpdate(id, { $pull: { reviews: reviewId } });
-    await Review.findByIdAndDelete(req.params.reviewId);
+    await Book.findByIdAndUpdate(id, { $pull: { reviews: reviewId } });
+    await Review.findByIdAndDelete(reviewId);
     req.flash("success", "Review deleted!");
     res.redirect(`/books/${id}`);
   })

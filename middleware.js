@@ -3,31 +3,10 @@ const { bookSchema,reviewSchema } = require('./schemas');
 const Book = require('./models/books');
 const Review = require('./models/review');
 
-module.exports.isLoggedIn=(req,res,next)=>{
- console.log("REQ.USER.......",req.user);
-
-    if(!req.isAuthenticated()){
-        console.log('login to continue');
-        req.flash('error','u must be signed in first');
-        req.session.returnTo=req.path;
-        console.log(req.session.returnTo);
-        return res.redirect('/login');
-    }
-
-    else{
+module.exports.isLoggedIn = (req, res, next) => {
+    if (!req.isAuthenticated()) {
         req.session.returnTo = req.originalUrl;
-        console.log(req.session.returnTo);
-        // res.redirect(req.session.returnTo);
-        next(); 
-    }
-   
-}
-
-
-module.exports.isLoggedIn =(req,res,next)=>{
-    req.session.returnTo = req.originalUrl;
-    if(!req.isAuthenticated()){
-        req.flash('error','you must be signed in!');
+        req.flash('error', 'You must be signed in first!');
         return res.redirect('/login');
     }
     next();
