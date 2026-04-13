@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: bookswap
+    env: node
+    buildCommand: npm install
+    startCommand: node app.js
+    envVars:
+      - key: DB_URL
+        sync: false        # MongoDB Atlas connection string — set in Render dashboard
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_KEY
+        sync: false
+      - key: CLOUDINARY_SECRET
+        sync: false
+      - key: SECRET
+        sync: false        # session secret
+      - key: AI_SERVICE_URL
+        sync: false        # URL of deployed bookswap-ai service on Render
+      - key: NODE_ENV
+        value: production

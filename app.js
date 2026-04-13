@@ -34,6 +34,21 @@ const multer = require("multer");
 const { storage } = require("./cloudinary/index");
 const upload = multer({ storage });
 const Review = require("./models/review");
+const Pdf = require("./models/pdf");
+const axios = require("axios");
+const FormData = require("form-data");
+
+// PDF-specific Cloudinary storage (raw resource type to allow PDFs)
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const pdfStorage = new CloudinaryStorage({
+  cloudinary: require("./cloudinary").cloudinary,
+  params: {
+    folder: "bookswap_pdfs",
+    resource_type: "raw",
+    allowedFormats: ["pdf"],
+  },
+});
+const uploadPdf = multer({ storage: pdfStorage });
 
 const http = require("http");
 const { Server } = require("socket.io");
@@ -689,6 +704,137 @@ app.get("/", (req, res) => {
 app.all("*", (req, res, next) => {
   next(new ExpressError("Page Not Found", 404));
 });
+
+// =============================================================================
+// PDF LIBRARY ROUTES — Phase 9 (Digital Resource System)
+// =============================================================================
+
+// GET /pdfs — list all PDFs with optional filter
+app.get("/pdfs", catchAsync(async (req, res) => {
+  const { type, dept, q } = req.query;
+  const filter = {};
+  if (type && type !== "all") filter.resource_type = type;
+  if (dept) filter.department = new RegExp(dept, "i");
+  if (q) filter.$text = { $search: q };
+
+  const pdfs = await Pdf.find(filter).sort({ created_at: -1 }).limit(50);
+  res.render("pdfs/index", { pdfs, query: req.query });
+}));
+
+// GET /pdfs/new — upload form
+app.get("/pdfs/new", isLoggedIn, (req, res) => {
+  res.render("pdfs/new");
+});
+
+// POST /pdfs — upload a new PDF
+app.post("/pdfs", isLoggedIn, uploadPdf.single("pdf"), catchAsync(async (req, res) => {
+  const { title, subject, course, department, professor, resource_type, description } = req.body;
+
+  if (!req.file) {
+    req.flash("error", "Please select a PDF file to upload.");
+    return res.redirect("/pdfs/new");
+  }
+
+  const pdf = new Pdf({
+    title,
+    subject,
+    course,
+    department,
+    professor,
+    resource_type: resource_type || "notes",
+    description,
+    cloudinary_url: req.file.path,
+    cloudinary_public_id: req.file.filename,
+    uploadedBy: req.user._id
+  });
+
+  await pdf.save();
+
+  // Trigger Python service to generate embedding for this PDF
+  const aiUrl = process.env.AI_SERVICE_URL || "http://127.0.0.1:8001";
+  try {
+    await axios.post(`${aiUrl}/embed-pdf`, { pdf_id: String(pdf._id) });
+  } catch (e) {
+    // Non-blocking — embedding is best-effort
+    console.warn("Could not embed PDF:", e.message);
+  }
+
+  req.flash("success", "PDF uploaded successfully!");
+  res.redirect(`/pdfs/${pdf._id}`);
+}));
+
+// GET /pdfs/:id — view a single PDF
+app.get("/pdfs/:id", catchAsync(async (req, res) => {
+  const pdf = await Pdf.findById(req.params.id).populate("uploadedBy", "username");
+  if (!pdf) {
+    req.flash("error", "PDF not found.");
+    return res.redirect("/pdfs");
+  }
+  res.render("pdfs/show", { pdf });
+}));
+
+// DELETE /pdfs/:id — remove a PDF
+app.delete("/pdfs/:id", isLoggedIn, catchAsync(async (req, res) => {
+  const pdf = await Pdf.findById(req.params.id);
+  if (!pdf) {
+    req.flash("error", "PDF not found.");
+    return res.redirect("/pdfs");
+  }
+  if (!pdf.uploadedBy.equals(req.user._id)) {
+    req.flash("error", "You do not have permission to delete this PDF.");
+    return res.redirect(`/pdfs/${req.params.id}`);
+  }
+  // Delete from Cloudinary
+  try {
+    const { cloudinary: cld } = require("./cloudinary");
+    await cld.uploader.destroy(pdf.cloudinary_public_id, { resource_type: "raw" });
+  } catch (e) {
+    console.warn("Cloudinary delete error:", e.message);
+  }
+  await Pdf.findByIdAndDelete(req.params.id);
+  req.flash("success", "PDF deleted.");
+  res.redirect("/pdfs");
+}));
+
+// =============================================================================
+// CURRICULUM MATCHING ROUTE — Phase 10
+// Upload a lecture plan PDF → get topic-to-book matches from Python service
+// =============================================================================
+
+app.get("/curriculum", isLoggedIn, (req, res) => {
+  res.render("curriculum/upload");
+});
+
+app.post("/curriculum", isLoggedIn, uploadPdf.single("pdf"), catchAsync(async (req, res) => {
+  if (!req.file) {
+    req.flash("error", "Please upload a lecture plan PDF.");
+    return res.redirect("/curriculum");
+  }
+
+  const aiUrl = process.env.AI_SERVICE_URL || "http://127.0.0.1:8001";
+
+  try {
+    // Download the uploaded PDF from Cloudinary and forward to Python service
+    const pdfResponse = await axios.get(req.file.path, { responseType: "arraybuffer" });
+    const formData = new FormData();
+    formData.append("file", Buffer.from(pdfResponse.data), {
+      filename: req.file.originalname || "lecture_plan.pdf",
+      contentType: "application/pdf"
+    });
+
+    const aiResponse = await axios.post(`${aiUrl}/curriculum`, formData, {
+      headers: formData.getHeaders(),
+      timeout: 30000
+    });
+
+    const matchData = aiResponse.data;
+    res.render("curriculum/results", { matchData, filename: req.file.originalname });
+  } catch (e) {
+    console.error("Curriculum match error:", e.message);
+    req.flash("error", "Could not process the lecture plan. Please try again.");
+    res.redirect("/curriculum");
+  }
+}));
 
 app.use((err, req, res, next) => {
   const { statusCode = 500 } = err;

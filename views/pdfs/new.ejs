@@ -1,0 +1,59 @@
+<%- layout('layouts/boilerplate') %>
+
+<div class="container mt-4" style="max-width: 640px;">
+  <h2 class="mb-4">📤 Upload Study Material</h2>
+
+  <form action="/pdfs" method="POST" enctype="multipart/form-data" class="validated-form">
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Title *</label>
+      <input type="text" name="title" class="form-control" placeholder="e.g. Operating Systems — Silberschatz" required>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Subject *</label>
+      <input type="text" name="subject" class="form-control" placeholder="e.g. Operating Systems" required>
+    </div>
+
+    <div class="row mb-3">
+      <div class="col">
+        <label class="form-label fw-semibold">Course Code</label>
+        <input type="text" name="course" class="form-control" placeholder="e.g. CS301">
+      </div>
+      <div class="col">
+        <label class="form-label fw-semibold">Department</label>
+        <input type="text" name="department" class="form-control" placeholder="e.g. CSE">
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Professor / Source</label>
+      <input type="text" name="professor" class="form-control" placeholder="e.g. Prof. Sharma (optional)">
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Resource Type *</label>
+      <select name="resource_type" class="form-select" required>
+        <option value="notes">Notes</option>
+        <option value="textbook">Textbook</option>
+        <option value="previous_papers">Previous Year Papers</option>
+        <option value="reference">Reference Material</option>
+      </select>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label fw-semibold">Description</label>
+      <textarea name="description" class="form-control" rows="3" placeholder="Brief description of the content..."></textarea>
+    </div>
+
+    <div class="mb-4">
+      <label class="form-label fw-semibold">PDF File *</label>
+      <input type="file" name="pdf" class="form-control" accept=".pdf" required>
+      <div class="form-text">Only PDF files. Max 10MB.</div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-success">Upload PDF</button>
+      <a href="/pdfs" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </form>
+</div>

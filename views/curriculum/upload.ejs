@@ -1,0 +1,35 @@
+<%- layout('layouts/boilerplate') %>
+
+<div class="container mt-4" style="max-width: 600px;">
+  <h2 class="mb-1">🎓 Curriculum Matcher</h2>
+  <p class="text-muted mb-4">
+    Upload your professor's lecture plan PDF and instantly see which books in our library
+    cover each topic — with chapter-level suggestions.
+  </p>
+
+  <div class="card shadow-sm p-4">
+    <form action="/curriculum" method="POST" enctype="multipart/form-data" class="validated-form">
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Lecture Plan PDF</label>
+        <input type="file" name="pdf" class="form-control" accept=".pdf" required>
+        <div class="form-text">
+          Works best with IIT ISM standard 2-page lecture plan format.
+          Scanned/image PDFs may not parse correctly.
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-success w-100">
+        🔍 Match Topics to Books
+      </button>
+    </form>
+  </div>
+
+  <div class="mt-4 p-3 bg-light rounded">
+    <h6>How it works:</h6>
+    <ol class="text-muted small">
+      <li>We extract all lecture topics from your PDF</li>
+      <li>Each topic is matched to the most relevant book in our inventory using AI embeddings</li>
+      <li>We suggest the specific chapter in that book that best covers the topic</li>
+    </ol>
+  </div>
+</div>

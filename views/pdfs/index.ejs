@@ -1,0 +1,80 @@
+<%- layout('layouts/boilerplate') %>
+
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>📚 Digital Library</h2>
+    <a href="/pdfs/new" class="btn btn-success">+ Upload PDF</a>
+  </div>
+
+  <!-- Search & Filter Bar -->
+  <form method="GET" action="/pdfs" class="row g-2 mb-4">
+    <div class="col-md-4">
+      <input type="text" name="q" class="form-control" placeholder="Search title, subject..." value="<%= query.q || '' %>">
+    </div>
+    <div class="col-md-3">
+      <select name="type" class="form-select">
+        <option value="all" <%= !query.type || query.type === 'all' ? 'selected' : '' %>>All types</option>
+        <option value="textbook" <%= query.type === 'textbook' ? 'selected' : '' %>>Textbooks</option>
+        <option value="notes" <%= query.type === 'notes' ? 'selected' : '' %>>Notes</option>
+        <option value="previous_papers" <%= query.type === 'previous_papers' ? 'selected' : '' %>>Previous Year Papers</option>
+        <option value="reference" <%= query.type === 'reference' ? 'selected' : '' %>>Reference</option>
+      </select>
+    </div>
+    <div class="col-md-3">
+      <input type="text" name="dept" class="form-control" placeholder="Department (e.g. CSE)" value="<%= query.dept || '' %>">
+    </div>
+    <div class="col-md-2">
+      <button type="submit" class="btn btn-primary w-100">Search</button>
+    </div>
+  </form>
+
+  <!-- PDF Grid -->
+  <% if (pdfs.length === 0) { %>
+    <div class="alert alert-info">
+      No resources found. Be the first to <a href="/pdfs/new">upload one</a>!
+    </div>
+  <% } else { %>
+    <div class="row row-cols-1 row-cols-md-3 g-4">
+      <% pdfs.forEach(pdf => { %>
+        <div class="col">
+          <div class="card h-100 shadow-sm">
+            <div class="card-body">
+              <!-- Type badge -->
+              <span class="badge bg-<%= pdf.resource_type === 'textbook' ? 'primary' : pdf.resource_type === 'notes' ? 'success' : pdf.resource_type === 'previous_papers' ? 'warning text-dark' : 'secondary' %> mb-2">
+                <%= pdf.resource_type.replace('_', ' ').toUpperCase() %>
+              </span>
+
+              <h5 class="card-title"><%= pdf.title %></h5>
+              <p class="card-text text-muted mb-1">
+                <small><strong>Subject:</strong> <%= pdf.subject %></small>
+              </p>
+              <% if (pdf.course) { %>
+                <p class="card-text text-muted mb-1"><small><strong>Course:</strong> <%= pdf.course %></small></p>
+              <% } %>
+              <% if (pdf.department) { %>
+                <p class="card-text text-muted mb-1"><small><strong>Dept:</strong> <%= pdf.department %></small></p>
+              <% } %>
+              <% if (pdf.professor) { %>
+                <p class="card-text text-muted mb-1"><small><strong>By:</strong> <%= pdf.professor %></small></p>
+              <% } %>
+              <% if (pdf.description) { %>
+                <p class="card-text mt-2"><small><%= pdf.description.substring(0, 80) %><%= pdf.description.length > 80 ? '...' : '' %></small></p>
+              <% } %>
+            </div>
+            <div class="card-footer d-flex justify-content-between align-items-center">
+              <small class="text-muted">⬇️ <%= pdf.download_count || 0 %> downloads</small>
+              <a href="/pdfs/<%= pdf._id %>" class="btn btn-sm btn-outline-primary">View</a>
+            </div>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+  <% } %>
+
+  <!-- Curriculum matcher banner -->
+  <div class="mt-5 p-4 bg-light rounded border">
+    <h5>🎓 Match a Lecture Plan</h5>
+    <p class="text-muted mb-2">Upload your professor's lecture plan PDF and get instant book + chapter recommendations for every topic.</p>
+    <a href="/curriculum" class="btn btn-outline-success">Try Curriculum Matcher →</a>
+  </div>
+</div>

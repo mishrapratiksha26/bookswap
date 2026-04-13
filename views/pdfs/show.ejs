@@ -1,0 +1,62 @@
+<%- layout('layouts/boilerplate') %>
+
+<div class="container mt-4" style="max-width: 720px;">
+  <!-- Breadcrumb -->
+  <nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="/pdfs">Digital Library</a></li>
+      <li class="breadcrumb-item active"><%= pdf.title %></li>
+    </ol>
+  </nav>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <!-- Type + Title -->
+      <span class="badge bg-<%= pdf.resource_type === 'textbook' ? 'primary' : pdf.resource_type === 'notes' ? 'success' : pdf.resource_type === 'previous_papers' ? 'warning text-dark' : 'secondary' %> mb-2">
+        <%= pdf.resource_type.replace('_', ' ').toUpperCase() %>
+      </span>
+      <h2 class="card-title mt-1"><%= pdf.title %></h2>
+
+      <!-- Metadata -->
+      <table class="table table-sm table-borderless mt-3 mb-3" style="max-width: 400px;">
+        <tr><td class="text-muted">Subject</td><td><strong><%= pdf.subject %></strong></td></tr>
+        <% if (pdf.course) { %><tr><td class="text-muted">Course</td><td><%= pdf.course %></td></tr><% } %>
+        <% if (pdf.department) { %><tr><td class="text-muted">Department</td><td><%= pdf.department %></td></tr><% } %>
+        <% if (pdf.professor) { %><tr><td class="text-muted">By</td><td><%= pdf.professor %></td></tr><% } %>
+        <% if (pdf.uploadedBy) { %><tr><td class="text-muted">Uploaded by</td><td><%= pdf.uploadedBy.username %></td></tr><% } %>
+        <tr><td class="text-muted">Downloads</td><td><%= pdf.download_count || 0 %></td></tr>
+      </table>
+
+      <% if (pdf.description) { %>
+        <p class="card-text"><%= pdf.description %></p>
+      <% } %>
+
+      <!-- Chapter headings if available -->
+      <% if (pdf.chapter_headings && pdf.chapter_headings.length > 0) { %>
+        <hr>
+        <h6 class="text-muted">Chapters / Topics</h6>
+        <ul class="list-group list-group-flush mb-3">
+          <% pdf.chapter_headings.slice(0, 10).forEach(h => { %>
+            <li class="list-group-item py-1 px-0 border-0"><small>📄 <%= h %></small></li>
+          <% }) %>
+        </ul>
+      <% } %>
+
+      <!-- Action buttons -->
+      <div class="d-flex gap-2 flex-wrap mt-3">
+        <a href="<%= pdf.cloudinary_url %>" target="_blank" class="btn btn-primary"
+           onclick="fetch('/pdfs/<%= pdf._id %>/download', {method:'POST'})">
+          ⬇️ Download PDF
+        </a>
+        <a href="/pdfs" class="btn btn-outline-secondary">Back to Library</a>
+
+        <% if (currentUser && pdf.uploadedBy && pdf.uploadedBy._id && pdf.uploadedBy._id.equals(currentUser._id)) { %>
+          <form action="/pdfs/<%= pdf._id %>?_method=DELETE" method="POST" class="d-inline"
+                onsubmit="return confirm('Delete this PDF permanently?')">
+            <button type="submit" class="btn btn-outline-danger">Delete</button>
+          </form>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
