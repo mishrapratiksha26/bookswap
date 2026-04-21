@@ -217,3 +217,160 @@ a:hover { color: var(--bs-primary-hover); }
 .bs-badge--warning { background: var(--bs-warning-light); color: #b45309; }
 .bs-badge--info    { background: var(--bs-info-light);    color: #075985; }
 .bs-badge--muted   { background: var(--bs-surface-alt);   color: var(--bs-text-muted); }
+
+/* =========================================================================
+   DARK THEME — activated via <html data-theme="dark">
+   ---------------------------------------------------------------------------
+   We override the CSS custom properties only. Every component that uses
+   var(--bs-*) automatically retheemes. Pages with heavy inline styles
+   (books/index, books/show) get targeted body-level overrides below.
+   ========================================================================= */
+[data-theme="dark"] {
+    /* brand — slightly brighter teal for contrast on dark bg */
+    --bs-primary:        #2dd4bf;
+    --bs-primary-hover:  #5eead4;
+    --bs-primary-light:  #134e4a;
+    --bs-accent:         #fbbf24;
+    --bs-accent-hover:   #fcd34d;
+
+    /* neutral — near-black with warm tint (not pure #000) */
+    --bs-bg:             #0f172a;
+    --bs-surface:        #1e293b;
+    --bs-surface-alt:    #334155;
+    --bs-border:         #334155;
+    --bs-text:           #f1f5f9;
+    --bs-text-muted:     #94a3b8;
+    --bs-text-subtle:    #64748b;
+
+    /* semantic — lighten the foreground, darken the background */
+    --bs-success:        #4ade80;
+    --bs-success-light:  #14532d;
+    --bs-danger:         #f87171;
+    --bs-danger-light:   #7f1d1d;
+    --bs-warning:        #fbbf24;
+    --bs-warning-light:  #78350f;
+    --bs-info:           #38bdf8;
+    --bs-info-light:     #0c4a6e;
+
+    /* deeper shadows on dark */
+    --bs-shadow-sm:      0 1px 2px rgba(0, 0, 0, 0.4);
+    --bs-shadow-md:      0 4px 14px rgba(0, 0, 0, 0.5);
+    --bs-shadow-lg:      0 12px 28px rgba(0, 0, 0, 0.6);
+}
+
+/* Dark-mode base: colour-scheme helps form inputs, scrollbars, etc. */
+[data-theme="dark"] body { color-scheme: dark; background-color: var(--bs-bg); color: var(--bs-text); }
+
+/* -------------------------------------------------------------------------
+   Page-specific overrides for views that set their own body background
+   inline. We use !important sparingly and only on body to win the cascade
+   against their hardcoded gradients.
+   ------------------------------------------------------------------------- */
+[data-theme="dark"] body {
+    background: var(--bs-bg) !important;
+    background-image: none !important;
+}
+
+/* Books index — cards, inputs, labels */
+[data-theme="dark"] .card,
+[data-theme="dark"] .rec-card,
+[data-theme="dark"] .book-card,
+[data-theme="dark"] .review-form,
+[data-theme="dark"] .review-list,
+[data-theme="dark"] .review-card,
+[data-theme="dark"] .copies-section,
+[data-theme="dark"] .feature-card,
+[data-theme="dark"] .form-card,
+[data-theme="dark"] .filter-container {
+    background: var(--bs-surface) !important;
+    color: var(--bs-text);
+    border-color: var(--bs-border) !important;
+    box-shadow: var(--bs-shadow-md);
+}
+[data-theme="dark"] .card-title,
+[data-theme="dark"] .book-title,
+[data-theme="dark"] .page-title,
+[data-theme="dark"] .section-label,
+[data-theme="dark"] .rec-card .rec-title,
+[data-theme="dark"] h1, [data-theme="dark"] h2, [data-theme="dark"] h3,
+[data-theme="dark"] h4, [data-theme="dark"] h5, [data-theme="dark"] h6 {
+    color: var(--bs-text) !important;
+}
+[data-theme="dark"] .card-text,
+[data-theme="dark"] .book-info p,
+[data-theme="dark"] .review-card p,
+[data-theme="dark"] .card-author,
+[data-theme="dark"] .rec-card .rec-author {
+    color: var(--bs-text-muted) !important;
+}
+[data-theme="dark"] .description-snippet::after {
+    background: linear-gradient(to bottom, transparent, var(--bs-surface)) !important;
+}
+[data-theme="dark"] .filter-input,
+[data-theme="dark"] .filter-select,
+[data-theme="dark"] .search-input,
+[data-theme="dark"] .form-control,
+[data-theme="dark"] .form-select,
+[data-theme="dark"] textarea.form-control {
+    background: var(--bs-surface-alt) !important;
+    color: var(--bs-text) !important;
+    border-color: var(--bs-border) !important;
+}
+[data-theme="dark"] .form-label,
+[data-theme="dark"] .filter-check {
+    color: var(--bs-text-muted) !important;
+}
+[data-theme="dark"] .copy-row {
+    border-color: var(--bs-border) !important;
+    background: var(--bs-surface-alt);
+}
+[data-theme="dark"] .copy-row:hover {
+    background: #115e59 !important;
+    border-color: var(--bs-primary) !important;
+}
+[data-theme="dark"] .copy-owner { color: var(--bs-text) !important; }
+[data-theme="dark"] .copy-meta  { color: var(--bs-text-muted) !important; }
+[data-theme="dark"] .alert-warning {
+    background: var(--bs-warning-light) !important;
+    color: #fef3c7 !important;
+    border-color: transparent !important;
+}
+[data-theme="dark"] .alert-info {
+    background: var(--bs-info-light) !important;
+    color: #e0f2fe !important;
+    border-color: transparent !important;
+}
+[data-theme="dark"] .autofill-box {
+    background: var(--bs-surface-alt) !important;
+    border-color: var(--bs-primary) !important;
+}
+[data-theme="dark"] .candidate { border-color: var(--bs-border); }
+[data-theme="dark"] .candidate:hover { background: var(--bs-primary-light); }
+
+/* =========================================================================
+   Theme-toggle button — lives in the navbar
+   ========================================================================= */
+.bs-theme-toggle {
+    background: transparent;
+    border: 1px solid var(--bs-border);
+    color: var(--bs-text-muted);
+    width: 36px;
+    height: 36px;
+    border-radius: var(--bs-radius-full);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.18s ease;
+}
+.bs-theme-toggle:hover {
+    border-color: var(--bs-primary);
+    color: var(--bs-primary);
+    background: var(--bs-primary-light);
+}
+/* Show moon in light mode, sun in dark mode */
+.bs-theme-toggle .icon-dark { display: inline; }
+.bs-theme-toggle .icon-light { display: none; }
+[data-theme="dark"] .bs-theme-toggle .icon-dark { display: none; }
+[data-theme="dark"] .bs-theme-toggle .icon-light { display: inline; }

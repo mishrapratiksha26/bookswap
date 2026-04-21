@@ -16,6 +16,15 @@
     </div>
 
     <div class="bs-navbar__nav">
+        <!-- Theme toggle — moon icon in light mode, sun icon in dark mode.
+             Flips <html data-theme> and persists to localStorage. Visible
+             on every page because the navbar is included in boilerplate. -->
+        <button type="button" class="bs-theme-toggle" onclick="bsToggleTheme()"
+                aria-label="Toggle dark mode" title="Toggle theme">
+            <span class="icon-dark">🌙</span>
+            <span class="icon-light">☀️</span>
+        </button>
+
         <% if (!currentUser) { %>
             <a href="/login">Login</a>
             <a class="bs-navbar__cta" href="/register">Sign up</a>
@@ -26,3 +35,14 @@
         <% } %>
     </div>
 </nav>
+
+<script>
+    // Swap <html data-theme> between light & dark, persist the choice so
+    // every subsequent page paints with the right tokens on first load.
+    function bsToggleTheme() {
+        var el = document.documentElement;
+        var next = el.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        el.setAttribute('data-theme', next);
+        try { localStorage.setItem('bs-theme', next); } catch (e) {}
+    }
+</script>

@@ -6,6 +6,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>bookswap</title>
 
+    <!-- Theme bootstrap — applies saved theme BEFORE stylesheets load so
+         there's no white flash when opening a page in dark mode. Reads
+         localStorage first, falls back to system preference. -->
+    <script>
+        (function() {
+            try {
+                var saved = localStorage.getItem('bs-theme');
+                var theme = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) { /* localStorage blocked — stay on light */ }
+        })();
+    </script>
+
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/5.0.0-alpha1/css/bootstrap.min.css"
     integrity="sha384-r4NyP46KrjDleawBgD5tp8Y7UzmLA05oM1iAEQ17CSuDqnUK2+k9luXQOfXJCJ4I" crossorigin="anonymous">
     <!-- BookSwap design system — palette, buttons, navbar, wishlist heart -->

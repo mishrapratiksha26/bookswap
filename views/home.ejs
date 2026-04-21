@@ -5,6 +5,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BookSwap — your campus library, reimagined</title>
+    <!-- Theme bootstrap BEFORE stylesheets — avoids flash on direct load. -->
+    <script>
+        (function() {
+            try {
+                var saved = localStorage.getItem('bs-theme');
+                var theme = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+                document.documentElement.setAttribute('data-theme', theme);
+            } catch (e) {}
+        })();
+    </script>
     <link rel="stylesheet" href="/stylesheets/app.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
@@ -148,6 +158,11 @@
             <a href="/books">Books</a>
             <a href="/pdfs">Library</a>
             <a href="/curriculum">Curriculum</a>
+            <button type="button" class="bs-theme-toggle" onclick="bsToggleTheme()"
+                    aria-label="Toggle dark mode" title="Toggle theme">
+                <span class="icon-dark">🌙</span>
+                <span class="icon-light">☀️</span>
+            </button>
             <% if (!currentUser) { %>
                 <a href="/login">Login</a>
                 <a class="home-nav__cta" href="/register">Sign up</a>
@@ -157,6 +172,14 @@
             <% } %>
         </div>
     </nav>
+    <script>
+        function bsToggleTheme() {
+            var el = document.documentElement;
+            var next = el.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+            el.setAttribute('data-theme', next);
+            try { localStorage.setItem('bs-theme', next); } catch (e) {}
+        }
+    </script>
 
     <main>
         <section class="hero">
