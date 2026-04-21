@@ -1,29 +1,28 @@
-<nav class="navbar sticky-top navbar-expand-lg navbar-dark bg-dark">
-  <div class="container-fluid">
-      <a class="navbar-brand" href="#">BookSwap</a>
-      <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNavAltMarkup"
-          aria-controls="navbarNavAltMarkup" aria-expanded="false" aria-label="Toggle navigation">
-          <span class="navbar-toggler-icon"></span>
-      </button>
-      <div class="collapse navbar-collapse" id="navbarNavAltMarkup">
-          <div class="navbar-nav">
-              <a class="nav-link" href="/">Home</a>
-              <a class="nav-link" href="/books">Books</a>
-              <a class="nav-link" href="/books/new">Post a Book</a>
-              <a class="nav-link" href="/chat">Chats</a>
-              <a class="nav-link" href="/pdfs">📚 Library</a>
-              <a class="nav-link" href="/curriculum">🎓 Curriculum</a>
-          </div>
-          <div class="navbar-nav ml-auto">
-              <% if(!currentUser) {%>
-              <a class="nav-link" href="/login">Login</a>
-              <a class="nav-link" href="/register">Register</a>
-              <% } else {%>
-              <a class="nav-link" href="/logout">Logout</a>
-              <a class="nav-link" href="/profile">Profile</a>
-              <% } %>
-          </div>
-      </div>
-  </div>
-</nav>
+<!--
+  Modern BookSwap nav. Uses design-system classes from public/stylesheets/app.css.
+  No Bootstrap navbar classes — cleaner and doesn't fight our tokens.
+-->
+<nav class="bs-navbar">
+    <a class="bs-navbar__brand" href="/">📚 BookSwap</a>
 
+    <div class="bs-navbar__nav">
+        <a href="/books">Books</a>
+        <a href="/pdfs">Library</a>
+        <a href="/curriculum">Curriculum</a>
+        <% if (currentUser) { %>
+            <a href="/wishlist">Wishlist</a>
+            <a href="/chat">Chats</a>
+        <% } %>
+    </div>
+
+    <div class="bs-navbar__nav">
+        <% if (!currentUser) { %>
+            <a href="/login">Login</a>
+            <a class="bs-navbar__cta" href="/register">Sign up</a>
+        <% } else { %>
+            <a href="/books/new" class="bs-navbar__cta">＋ Post Book</a>
+            <a href="/profile"><%= currentUser.username %></a>
+            <a href="/logout">Logout</a>
+        <% } %>
+    </div>
+</nav>

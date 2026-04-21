@@ -1,0 +1,182 @@
+<% layout('layouts/boilerplate') %>
+
+<style>
+    .wishlist-wrap {
+        max-width: 1200px;
+        margin: 2.5rem auto;
+        padding: 0 1.5rem;
+    }
+    .wishlist-header {
+        margin-bottom: 2rem;
+    }
+    .wishlist-header h1 {
+        font-weight: 700;
+        font-size: 2rem;
+        color: var(--bs-text);
+        margin: 0 0 0.3rem;
+        letter-spacing: -0.5px;
+    }
+    .wishlist-header p { color: var(--bs-text-muted); margin: 0; }
+
+    .wishlist-empty {
+        text-align: center;
+        padding: 4rem 2rem;
+        background: var(--bs-surface);
+        border-radius: var(--bs-radius-lg);
+        border: 1px dashed var(--bs-border);
+    }
+    .wishlist-empty h3 { color: var(--bs-text); margin-bottom: 0.5rem; }
+    .wishlist-empty p  { color: var(--bs-text-muted); margin-bottom: 1.5rem; }
+
+    .wl-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 1.5rem;
+    }
+    .wl-card {
+        background: var(--bs-surface);
+        border-radius: var(--bs-radius-lg);
+        overflow: hidden;
+        box-shadow: var(--bs-shadow-sm);
+        transition: all 0.2s;
+        border: 1px solid var(--bs-border);
+        position: relative;
+        display: flex;
+        flex-direction: column;
+    }
+    .wl-card:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--bs-shadow-md);
+    }
+    .wl-card__img {
+        width: 100%;
+        height: 280px;
+        object-fit: cover;
+        background: var(--bs-surface-alt);
+    }
+    .wl-card__body {
+        padding: 1rem 1.1rem 1.2rem;
+        display: flex;
+        flex-direction: column;
+        flex-grow: 1;
+    }
+    .wl-card__title {
+        font-weight: 600;
+        font-size: 1rem;
+        color: var(--bs-text);
+        margin: 0 0 0.25rem;
+        line-height: 1.3;
+        /* truncate at two lines */
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .wl-card__author {
+        color: var(--bs-text-muted);
+        font-size: 0.85rem;
+        margin: 0 0 0.75rem;
+    }
+    .wl-card__footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: auto;
+        gap: 0.5rem;
+    }
+</style>
+
+<div class="wishlist-wrap">
+    <div class="wishlist-header">
+        <h1>📚 My Wishlist</h1>
+        <p>Books you've saved for later. We use these to improve your recommendations.</p>
+    </div>
+
+    <% if (!books.length) { %>
+        <div class="wishlist-empty">
+            <h3>Your wishlist is empty</h3>
+            <p>Tap the ❤️ icon on any book to save it here.</p>
+            <a href="/books" class="bs-btn bs-btn--primary">Browse Books</a>
+        </div>
+    <% } else { %>
+        <div class="wl-grid">
+            <% books.forEach(book => { %>
+                <div class="wl-card">
+                    <!-- Heart button — "remove from wishlist" from this view -->
+                    <button
+                        class="bs-wishlist-heart is-saved"
+                        title="Remove from wishlist"
+                        onclick="toggleWishlist('<%= book._id %>', this, true)">
+                        ❤️
+                    </button>
+                    <a href="/books/<%= book._id %>" style="text-decoration: none; color: inherit; display: contents;">
+                        <% if (book.images && book.images.length > 0) { %>
+                            <img class="wl-card__img" src="<%= book.images[0].url %>" alt="<%= book.title %>">
+                        <% } else { %>
+                            <img class="wl-card__img"
+                                 src="https://res.cloudinary.com/douqbebwk/image/upload/v1600103881/YelpCamp/lz8jjv2gyynjil7lswf4.png"
+                                 alt="Default cover">
+                        <% } %>
+                        <div class="wl-card__body">
+                            <h3 class="wl-card__title"><%= book.title %></h3>
+                            <p class="wl-card__author"><%= book.author %></p>
+                            <div class="wl-card__footer">
+                                <% if (book.available) { %>
+                                    <span class="bs-badge bs-badge--success">✓ Available</span>
+                                <% } else { %>
+                                    <span class="bs-badge bs-badge--danger">Unavailable</span>
+                                <% } %>
+                                <% if (book.avg_rating && book.avg_rating > 0) { %>
+                                    <span class="bs-badge bs-badge--muted">
+                                        ★ <%= book.avg_rating.toFixed(1) %>
+                                    </span>
+                                <% } %>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            <% }) %>
+        </div>
+    <% } %>
+</div>
+
+<script>
+    // Reused by heart buttons on every page. Takes (bookId, buttonEl, removeOnUnsave).
+    // If removeOnUnsave is true (wishlist page view), we hide the whole card
+    // when the user un-saves — it no longer belongs on this list.
+    async function toggleWishlist(bookId, btn, removeOnUnsave) {
+        try {
+            const resp = await fetch(`/wishlist/${bookId}/toggle`, {
+                method: "POST",
+                headers: { "Accept": "application/json" }
+            });
+            if (!resp.ok) {
+                if (resp.status === 401 || resp.redirected) {
+                    window.location.href = "/login";
+                    return;
+                }
+                throw new Error("Request failed");
+            }
+            const data = await resp.json();
+            if (data.saved) {
+                btn.classList.add("is-saved");
+                btn.textContent = "❤️";
+            } else {
+                btn.classList.remove("is-saved");
+                btn.textContent = "🤍";
+                if (removeOnUnsave) {
+                    // Animate out then remove card from DOM
+                    const card = btn.closest(".wl-card");
+                    if (card) {
+                        card.style.transition = "opacity 0.3s, transform 0.3s";
+                        card.style.opacity = "0";
+                        card.style.transform = "scale(0.95)";
+                        setTimeout(() => card.remove(), 300);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("Wishlist toggle failed", e);
+        }
+    }
+</script>

@@ -4,52 +4,199 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BookSwap</title>
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/5.0.0-alpha1/css/bootstrap.min.css"
-        integrity="sha384-r4NyP46KrjDleawBgD5tp8Y7UzmLA05oM1iAEQ17CSuDqnUK2+k9luXQOfXJCJ4I" crossorigin="anonymous">
-    <link rel="stylesheet" href="/stylesheets/home.css">
+    <title>BookSwap — your campus library, reimagined</title>
+    <link rel="stylesheet" href="/stylesheets/app.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        /* Hero + feature grid — scoped to the landing page. Uses design tokens
+           from app.css so palette stays consistent. */
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            background: var(--bs-bg);
+        }
+        .home-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1.2rem 2.5rem;
+            border-bottom: 1px solid var(--bs-border);
+            background: var(--bs-surface);
+        }
+        .home-nav__brand {
+            font-weight: 800;
+            font-size: 1.4rem;
+            color: var(--bs-primary);
+            text-decoration: none;
+        }
+        .home-nav__links { display: flex; gap: 0.5rem; align-items: center; }
+        .home-nav__links a {
+            color: var(--bs-text);
+            padding: 0.45rem 0.9rem;
+            border-radius: var(--bs-radius-md);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .home-nav__links a:hover { background: var(--bs-primary-light); color: var(--bs-primary); }
+        .home-nav__cta {
+            background: var(--bs-primary);
+            color: #fff !important;
+        }
+        .home-nav__cta:hover { background: var(--bs-primary-hover) !important; color: #fff !important; }
+
+        /* Hero */
+        .hero {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 5rem 2rem 3rem;
+            text-align: center;
+        }
+        .hero__pill {
+            display: inline-block;
+            padding: 0.35rem 0.9rem;
+            background: var(--bs-primary-light);
+            color: var(--bs-primary);
+            border-radius: var(--bs-radius-full);
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+        }
+        .hero h1 {
+            font-size: clamp(2rem, 5vw, 3.4rem);
+            font-weight: 800;
+            letter-spacing: -1.5px;
+            line-height: 1.1;
+            margin: 0 0 1.2rem;
+            color: var(--bs-text);
+        }
+        .hero h1 .accent { color: var(--bs-primary); }
+        .hero p.lead {
+            font-size: 1.15rem;
+            color: var(--bs-text-muted);
+            max-width: 620px;
+            margin: 0 auto 2rem;
+            line-height: 1.55;
+        }
+        .hero__actions {
+            display: flex;
+            gap: 0.75rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        /* Feature cards */
+        .features {
+            max-width: 1100px;
+            margin: 4rem auto 0;
+            padding: 0 2rem;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.5rem;
+        }
+        .feature-card {
+            background: var(--bs-surface);
+            border: 1px solid var(--bs-border);
+            border-radius: var(--bs-radius-lg);
+            padding: 2rem 1.8rem;
+            transition: all 0.2s;
+        }
+        .feature-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--bs-shadow-md);
+        }
+        .feature-card__icon {
+            width: 44px;
+            height: 44px;
+            border-radius: var(--bs-radius-md);
+            background: var(--bs-primary-light);
+            color: var(--bs-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            margin-bottom: 1rem;
+        }
+        .feature-card h3 {
+            margin: 0 0 0.4rem;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--bs-text);
+        }
+        .feature-card p {
+            margin: 0;
+            color: var(--bs-text-muted);
+            font-size: 0.93rem;
+            line-height: 1.55;
+        }
+
+        footer {
+            margin-top: 6rem;
+            padding: 2rem;
+            border-top: 1px solid var(--bs-border);
+            text-align: center;
+            color: var(--bs-text-subtle);
+            font-size: 0.85rem;
+        }
+    </style>
 </head>
 
-<body class="d-flex text-center text-white bg-dark">
-    <div class="cover-container d-flex w-100 h-100 p-3 mx-auto flex-column">
-        <header class="mb-auto">
-            <div>
-                <h3 class="float-md-left mb-0">BookSwap</h3>
-                <nav class="nav nav-masthead justify-content-center float-md-right">
-                    <a class="nav-link active" aria-current="page" href="#">Home</a>
-                    <a class="nav-link" href="/books">Books</a>
-                    <% if(!currentUser) { %>
-                    <a class="nav-link" href="/login">Login</a>
-                    <a class="nav-link" href="/register">Register</a>
-                    <% } else { %>
-                    <a class="nav-link" href="/logout">Logout</a>
-                    <a class="nav-link" href="/profile">Profile</a>
-                    <% } %>
-                </nav>
+<body>
+    <nav class="home-nav">
+        <a class="home-nav__brand" href="/">📚 BookSwap</a>
+        <div class="home-nav__links">
+            <a href="/books">Books</a>
+            <a href="/pdfs">Library</a>
+            <a href="/curriculum">Curriculum</a>
+            <% if (!currentUser) { %>
+                <a href="/login">Login</a>
+                <a class="home-nav__cta" href="/register">Sign up</a>
+            <% } else { %>
+                <a href="/profile"><%= currentUser.username %></a>
+                <a href="/logout">Logout</a>
+            <% } %>
+        </div>
+    </nav>
+
+    <main>
+        <section class="hero">
+            <span class="hero__pill">🎓 IIT (ISM) Dhanbad — Peer-to-Peer Platform</span>
+            <h1>Your campus library,<br><span class="accent">reimagined.</span></h1>
+            <p class="lead">
+                Borrow books from your classmates, share study notes, and let our AI map your lecture plan to exactly the chapters you need to read.
+            </p>
+            <div class="hero__actions">
+                <a href="/books" class="bs-btn bs-btn--primary">Browse Books</a>
+                <a href="/curriculum" class="bs-btn bs-btn--ghost">Upload Your Syllabus</a>
             </div>
-        </header>
-        <main class="px-3">
-            <h1>BookSwap</h1>
-            <p class="lead"> Welcome to BookSwap! <br> Jump right in and explore our library. <br>
-                Feel free to share books of your own and order from others!</p>
-            <a href="/books" class="btn btn-lg btn-secondary font-weight-bold border-white bg-white">View
-                Books</a>
-        </main>
+        </section>
 
-        <footer class="mt-auto text-white-50">
-            <p>&copy; 2025 </p>
-        </footer>
+        <section class="features">
+            <div class="feature-card">
+                <div class="feature-card__icon">📖</div>
+                <h3>Peer-to-Peer Lending</h3>
+                <p>Find the book you need with a classmate who's already read it. Request, borrow, return — no bookstores involved.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-card__icon">📄</div>
+                <h3>Shared Study Library</h3>
+                <p>Notes, textbooks, previous year papers — all uploaded and searchable. Filter by department, course, or professor.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-card__icon">🎯</div>
+                <h3>Curriculum → Chapter</h3>
+                <p>Upload your lecture plan. We match each unit to the exact chapter in your professor's recommended book — with page numbers when we have them.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-card__icon">🤖</div>
+                <h3>AI Librarian</h3>
+                <p>Ask in plain English — "something gripping", "OS notes by second-years", "books Prof Sharma recommends" — the agent figures out the rest.</p>
+            </div>
+        </section>
+    </main>
 
-
-    </div>
-
-
-    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js"
-        integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo"
-        crossorigin="anonymous"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/5.0.0-alpha1/js/bootstrap.min.js"
-        integrity="sha384-oesi62hOLfzrys4LxRF63OJCXdXDipiYWBnvTl9Y9/TRlw5xlKIEHpNyvvDShgf/"
-        crossorigin="anonymous"></script>
+    <footer>
+        BookSwap · MTech thesis project · IIT (ISM) Dhanbad
+    </footer>
 </body>
-
 </html>

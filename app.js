@@ -35,6 +35,7 @@ const { storage } = require("./cloudinary/index");
 const upload = multer({ storage });
 const Review = require("./models/review");
 const Pdf = require("./models/pdf");
+const Wishlist = require("./models/wishlist");
 const axios = require("axios");
 const FormData = require("form-data");
 
@@ -200,10 +201,21 @@ app.get("/books", catchAsync(async (req, res) => {
     const distinctCourses     = (await Book.distinct('course')).filter(Boolean);
     const distinctDepartments = (await Book.distinct('department')).filter(Boolean);
 
+    // Load the set of book IDs this user has wishlisted — passed to the view
+    // so each card can render its heart icon in the correct saved/unsaved
+    // state on first paint (no flicker, no JS-after-load). Stored as a Set of
+    // string IDs because that's what the template uses for O(1) lookup.
+    let wishlistedIds = new Set();
+    if (req.user) {
+        const saved = await Wishlist.find({ user: req.user._id }).select('book');
+        wishlistedIds = new Set(saved.map(w => w.book.toString()));
+    }
+
     res.render("books/index", {
         books, searchResults, query: query || "", personalRecommendations,
         filters: { genre, author, department, course, year, min_rating, available, sort },
-        distinctCourses, distinctDepartments
+        distinctCourses, distinctDepartments,
+        wishlistedIds
     });
 }));
 
@@ -349,8 +361,16 @@ app.get(
     }) : null;
 
     const ownerId = book.owner._id;
-    
-    res.render("books/show", { book, currentUserId, ownerId, similarBooks, activeBorrowRequest, userBorrowRequest });
+
+    // Is this book wishlisted by the current user? Controls the initial
+    // state of the heart button on the show page.
+    let isWishlisted = false;
+    if (currentUserId) {
+        const w = await Wishlist.findOne({ user: currentUserId, book: book._id });
+        isWishlisted = !!w;
+    }
+
+    res.render("books/show", { book, currentUserId, ownerId, similarBooks, activeBorrowRequest, userBorrowRequest, isWishlisted });
   })
 );
 
@@ -540,6 +560,122 @@ app.delete(
     res.redirect(`/books/${id}`);
   })
 );
+
+// ---------------------------------------------------------------------------
+// WISHLIST
+// ---------------------------------------------------------------------------
+// POST /wishlist/:bookId/toggle — idempotent add/remove.
+//   Returns JSON so the heart button can update without a full page reload.
+//   Falls back gracefully to a redirect for no-JS clients.
+//
+// GET  /wishlist — list of books the current user has saved.
+//
+// Design note: we intentionally use a single toggle endpoint instead of
+// separate add/remove routes. The client doesn't need to know current state
+// — the server resolves it with a findOne + (create || delete) in one call.
+// ---------------------------------------------------------------------------
+app.post("/wishlist/:bookId/toggle", isLoggedIn, catchAsync(async (req, res) => {
+    const { bookId } = req.params;
+    const userId = req.user._id;
+
+    const existing = await Wishlist.findOne({ user: userId, book: bookId });
+    let saved;
+    if (existing) {
+        await Wishlist.deleteOne({ _id: existing._id });
+        saved = false;
+    } else {
+        try {
+            await Wishlist.create({ user: userId, book: bookId });
+            saved = true;
+        } catch (err) {
+            // Race-condition safety: if a parallel request created the entry
+            // between our findOne and create, treat it as "now saved".
+            if (err.code === 11000) saved = true;
+            else throw err;
+        }
+    }
+
+    // Wants JSON (fetch-driven heart button)?
+    if (req.xhr || (req.headers.accept || "").includes("application/json")) {
+        return res.json({ saved });
+    }
+    // Fallback: plain POST, send them back where they came from.
+    return res.redirect(req.get("Referer") || "/books");
+}));
+
+app.get("/wishlist", isLoggedIn, catchAsync(async (req, res) => {
+    // Populate the full book doc so the view can show cover + availability.
+    // Sort newest-first so recent saves are at the top.
+    const entries = await Wishlist.find({ user: req.user._id })
+        .populate("book")
+        .sort({ created_at: -1 });
+
+    // Filter out entries whose book has been deleted (populate returns null).
+    const books = entries.map(e => e.book).filter(Boolean);
+
+    res.render("wishlist/index", { books });
+}));
+
+// ---------------------------------------------------------------------------
+// GOOGLE BOOKS METADATA PROXY — autofill for the upload form
+// ---------------------------------------------------------------------------
+// GET /api/book-metadata?title=...&author=...
+//   Queries Google Books' public search API (no API key needed for basic use)
+//   and returns a normalised payload the new-book form can paste into its
+//   fields. We proxy server-side so:
+//     (a) cross-origin + rate-limit concerns stay on the backend
+//     (b) the API URL / key (if later needed) is never in browser code
+//     (c) we can trim the 5KB Google response down to the 6 fields we use
+// ---------------------------------------------------------------------------
+app.get("/api/book-metadata", catchAsync(async (req, res) => {
+    const { title, author } = req.query;
+    if (!title || !title.trim()) {
+        return res.status(400).json({ error: "title query parameter required" });
+    }
+
+    // Build Google Books query. `intitle:` scopes the match to titles; if an
+    // author is also given we AND it with `inauthor:` for sharper results.
+    let q = `intitle:${title.trim()}`;
+    if (author && author.trim()) q += `+inauthor:${author.trim()}`;
+
+    const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=5`;
+
+    try {
+        const resp = await axios.get(url, { timeout: 6000 });
+        const items = resp.data.items || [];
+        if (items.length === 0) {
+            return res.json({ found: false });
+        }
+
+        // Return the top 5 candidates so the UI can let the user pick the
+        // right edition (e.g. when multiple editions of the same book exist).
+        const candidates = items.slice(0, 5).map(item => {
+            const v = item.volumeInfo || {};
+            const isbn = (v.industryIdentifiers || []).find(i => i.type === "ISBN_13")
+                      || (v.industryIdentifiers || []).find(i => i.type === "ISBN_10");
+            // Google returns http:// image URLs by default — force https to
+            // avoid mixed-content blocks on our https site.
+            let cover = (v.imageLinks && (v.imageLinks.thumbnail || v.imageLinks.smallThumbnail)) || null;
+            if (cover) cover = cover.replace(/^http:/, "https:");
+            return {
+                title:            v.title || "",
+                authors:          v.authors || [],
+                description:      v.description || "",
+                published_date:   v.publishedDate || "",           // e.g. "2017-05-16"
+                publication_year: v.publishedDate ? parseInt(v.publishedDate.substring(0, 4), 10) : null,
+                page_count:       v.pageCount || null,
+                categories:       v.categories || [],              // Google's genre hints
+                cover_url:        cover,
+                isbn:             isbn ? isbn.identifier : null
+            };
+        });
+
+        return res.json({ found: true, candidates });
+    } catch (err) {
+        console.log("Google Books proxy failed:", err.message);
+        return res.status(502).json({ error: "metadata service unavailable" });
+    }
+}));
 
 app.post('/chat/:userId/delete', async (req, res) => {
   const currentUserId = req.user._id;

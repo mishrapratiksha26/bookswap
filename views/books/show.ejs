@@ -105,6 +105,19 @@
 </div>
 
 <div class="text-center mt-3">
+  <% if (currentUserId && currentUserId.toString() !== ownerId.toString()) { %>
+    <!-- Wishlist toggle (only shown to non-owners; owning-a-book-you-also-wishlist
+         doesn't make sense in our platform). Heart state comes from the server
+         so first paint matches ground truth with no flicker. -->
+    <button
+      id="wishlist-toggle"
+      class="bs-wishlist-btn <%= isWishlisted ? 'is-saved' : '' %>"
+      onclick="toggleDetailWishlist('<%= book._id %>')">
+      <span id="wl-icon"><%= isWishlisted ? '❤️' : '🤍' %></span>
+      <span id="wl-label"><%= isWishlisted ? 'Saved to Wishlist' : 'Save to Wishlist' %></span>
+    </button>
+  <% } %>
+
   <% if (currentUserId && currentUserId.toString() === ownerId.toString()) { %>
     <a class="btn btn-info me-2" href="/books/<%= book._id %>/edit">Edit</a>
     <form class="d-inline" action="/books/<%= book._id %>?_method=DELETE" method="POST">
@@ -201,6 +214,38 @@
     <!-- End Review Section -->
 
   </div>
+
+  <script>
+    // Toggle wishlist from the show page. Updates the button text + icon
+    // immediately — no page reload.
+    async function toggleDetailWishlist(bookId) {
+        const btn   = document.getElementById('wishlist-toggle');
+        const icon  = document.getElementById('wl-icon');
+        const label = document.getElementById('wl-label');
+        try {
+            const resp = await fetch(`/wishlist/${bookId}/toggle`, {
+                method: 'POST',
+                headers: { 'Accept': 'application/json' }
+            });
+            if (!resp.ok) {
+                if (resp.status === 401) { window.location.href = '/login'; return; }
+                throw new Error();
+            }
+            const data = await resp.json();
+            if (data.saved) {
+                btn.classList.add('is-saved');
+                icon.textContent  = '❤️';
+                label.textContent = 'Saved to Wishlist';
+            } else {
+                btn.classList.remove('is-saved');
+                icon.textContent  = '🤍';
+                label.textContent = 'Save to Wishlist';
+            }
+        } catch (e) {
+            console.error('Wishlist toggle failed', e);
+        }
+    }
+  </script>
 
   <!-- Similar Books -->
   <% if (similarBooks && similarBooks.length > 0) { %>

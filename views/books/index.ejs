@@ -140,6 +140,7 @@
     transition: all 0.3s ease;
     display: flex;
     flex-direction: column;
+    position: relative;  /* anchor for the floating wishlist heart */
   }
 
   .card:hover {
@@ -324,6 +325,15 @@
   <div class="book-grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 340px));">
     <% for (let book of searchResults) { %>
       <div class="card">
+        <% if (currentUser) { %>
+          <% const saved = wishlistedIds && wishlistedIds.has(book._id.toString()); %>
+          <button
+            class="bs-wishlist-heart <%= saved ? 'is-saved' : '' %>"
+            onclick="toggleWishlist('<%= book._id %>', this, false)"
+            title="<%= saved ? 'Remove from wishlist' : 'Add to wishlist' %>">
+            <%= saved ? '❤️' : '🤍' %>
+          </button>
+        <% } %>
         <% if (book.images && book.images.length) { %>
           <img class="card-img-top" alt="Book cover" src="<%= book.images[0].url %>">
         <% } else { %>
@@ -364,6 +374,15 @@
 <div class="book-grid">
   <% for (let book of books) { %>
     <div class="card">
+      <% if (currentUser) { %>
+        <% const saved = wishlistedIds && wishlistedIds.has(book._id.toString()); %>
+        <button
+          class="bs-wishlist-heart <%= saved ? 'is-saved' : '' %>"
+          onclick="toggleWishlist('<%= book._id %>', this, false)"
+          title="<%= saved ? 'Remove from wishlist' : 'Add to wishlist' %>">
+          <%= saved ? '❤️' : '🤍' %>
+        </button>
+      <% } %>
       <% if (book.images.length) { %>
         <img class="card-img-top" alt="Book cover" src="<%= book.images[0].url %>">
       <% } else { %>
@@ -379,3 +398,35 @@
     </div>
   <% } %>
 </div>
+
+<script>
+    // Shared heart-toggle for every card on this page. Uses our design-system
+    // is-saved class — the button visually flips between 🤍 (unsaved) and ❤️.
+    // removeOnUnsave is false here because the books index always shows all
+    // books regardless of wishlist state — contrast with views/wishlist which
+    // removes the card on un-save.
+    async function toggleWishlist(bookId, btn, removeOnUnsave) {
+        try {
+            const resp = await fetch(`/wishlist/${bookId}/toggle`, {
+                method: 'POST',
+                headers: { 'Accept': 'application/json' }
+            });
+            if (!resp.ok) {
+                if (resp.status === 401) { window.location.href = '/login'; return; }
+                throw new Error();
+            }
+            const data = await resp.json();
+            if (data.saved) {
+                btn.classList.add('is-saved');
+                btn.textContent = '❤️';
+                btn.title = 'Remove from wishlist';
+            } else {
+                btn.classList.remove('is-saved');
+                btn.textContent = '🤍';
+                btn.title = 'Add to wishlist';
+            }
+        } catch (e) {
+            console.error('Wishlist toggle failed', e);
+        }
+    }
+</script>
