@@ -181,10 +181,24 @@ app.get("/books", catchAsync(async (req, res) => {
                 const response = await fetch(`${process.env.AI_SERVICE_URL}/recommend-personal`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ books: booksWithRatings, top_k: 5 })
+                    // Over-fetch so that after dropping this user's own
+                    // listings we still have ~5 recs to show.
+                    body: JSON.stringify({ books: booksWithRatings, top_k: 15 })
                 });
                 const data = await response.json();
-                personalRecommendations = data.results;
+                const recs = data.results || [];
+
+                // Filter out books the current user owns — recommending
+                // someone their own listing is obviously wrong.
+                const recIds = recs.map(b => b._id).filter(Boolean);
+                const ownedSet = new Set(
+                    (await Book.find({ _id: { $in: recIds }, owner: req.user._id })
+                        .select('_id'))
+                        .map(b => b._id.toString())
+                );
+                personalRecommendations = recs
+                    .filter(b => !ownedSet.has(String(b._id)))
+                    .slice(0, 5);
             }
         } catch (err) {
             console.log("Personal recommendations failed:", err);
@@ -393,10 +407,33 @@ app.get(
       const response = await fetch(`${process.env.AI_SERVICE_URL}/similar-books`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ book_id: book._id, top_k: 5 })
+        // Over-fetch: we'll drop the viewer's own listings + any other
+        // copies of THIS same book (those already show in "Other copies").
+        body: JSON.stringify({ book_id: book._id, top_k: 15 })
       });
       const data = await response.json();
-      similarBooks = data.results;
+      const rawSimilar = data.results || [];
+
+      // Exclude: (1) the viewer's own listings, (2) other copies of the
+      // SAME book (duplicate of the "Other copies" section above).
+      const simIds = rawSimilar.map(b => b._id).filter(Boolean);
+      const simDocs = await Book.find({ _id: { $in: simIds } })
+          .select('_id title author owner');
+      const titleKeyShown  = (book.title  || '').trim().toLowerCase();
+      const authorKeyShown = (book.author || '').trim().toLowerCase();
+      const viewerId = req.user ? req.user._id.toString() : null;
+      const dropSet = new Set(
+          simDocs.filter(d => {
+              const tk = (d.title  || '').trim().toLowerCase();
+              const ak = (d.author || '').trim().toLowerCase();
+              const isOwnListing   = viewerId && d.owner && d.owner.toString() === viewerId;
+              const isSameBookCopy = tk === titleKeyShown && ak === authorKeyShown;
+              return isOwnListing || isSameBookCopy;
+          }).map(d => d._id.toString())
+      );
+      similarBooks = rawSimilar
+          .filter(b => !dropSet.has(String(b._id)))
+          .slice(0, 5);
     } catch (err) {
       console.log("Similar books failed:", err);
     }
