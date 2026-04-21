@@ -68,10 +68,13 @@
 
                 <% if (rec.found && rec.book_author) { %>
                   <p class="text-muted small mb-2"><%= rec.book_author %></p>
+                <% } else if (rec.recommended_authors) { %>
+                  <p class="text-muted small mb-2"><%= rec.recommended_authors %></p>
                 <% } %>
 
                 <p class="text-muted small mb-2">
-                  <strong>Professor wrote:</strong> <em><%= rec.recommended_title %></em>
+                  <strong>From lecture plan:</strong>
+                  <em><%= rec.recommended_title %></em><% if (rec.recommended_authors) { %> — <%= rec.recommended_authors %><% } %>
                 </p>
 
                 <% if (rec.found) { %>
