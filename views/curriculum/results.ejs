@@ -79,12 +79,20 @@
 
                 <% if (rec.found) { %>
                   <div class="mt-2">
-                    <% if (rec.available) { %>
-                      <span class="badge bg-light text-success border border-success">📗 Available to borrow</span>
+                    <% if (rec.source_type === 'pdf') { %>
+                      <span class="badge bg-light text-primary border border-primary">📄 Digital copy in library</span>
+                      <% if (rec.cloudinary_url) { %>
+                        <a href="<%= rec.cloudinary_url %>" target="_blank" class="btn btn-sm btn-outline-primary ms-2">Open PDF</a>
+                      <% } %>
+                      <a href="/pdfs/<%= rec.book_id %>" class="btn btn-sm btn-outline-secondary ms-1">Details →</a>
                     <% } else { %>
-                      <span class="badge bg-light text-danger border border-danger">📕 Currently borrowed</span>
+                      <% if (rec.available) { %>
+                        <span class="badge bg-light text-success border border-success">📗 Available to borrow</span>
+                      <% } else { %>
+                        <span class="badge bg-light text-danger border border-danger">📕 Currently borrowed</span>
+                      <% } %>
+                      <a href="/books/<%= rec.book_id %>" class="btn btn-sm btn-outline-primary ms-2">View →</a>
                     <% } %>
-                    <a href="/books/<%= rec.book_id %>" class="btn btn-sm btn-outline-primary ms-2">View →</a>
                   </div>
                 <% } else { %>
                   <p class="small text-muted mb-0 mt-2">
