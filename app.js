@@ -129,6 +129,21 @@ app.use((req, res, next) => {
   next();
 });
 
+// Populate wishlist count on every request so the navbar badge renders
+// without every route having to fetch it. Non-fatal: if the lookup fails
+// (e.g. transient Atlas hiccup), we fall back to 0 rather than 500ing.
+app.use(async (req, res, next) => {
+  res.locals.wishlistCount = 0;
+  if (req.user) {
+    try {
+      res.locals.wishlistCount = await Wishlist.countDocuments({ user: req.user._id });
+    } catch (e) {
+      // swallow — badge just shows 0
+    }
+  }
+  next();
+});
+
 app.get("/books", catchAsync(async (req, res) => {
     const { query, genre, author, department, course, year, min_rating, available, sort } = req.query;
     let searchResults = [];
@@ -789,6 +804,13 @@ app.post('/borrow/:requestId/accept', isLoggedIn, catchAsync(async (req, res) =>
   await Book.findByIdAndUpdate(borrowRequest.book._id, {
     $set: { available: false }
   });
+
+  // If the borrower had wishlisted this copy, drop it — you don't "wish" for
+  // a book you now have. Keeps the wishlist meaningful (only stuff you
+  // actually want and don't yet have).
+  try {
+    await Wishlist.deleteOne({ user: borrowRequest.borrower._id, book: borrowRequest.book._id });
+  } catch (e) { /* non-fatal */ }
 
   const suggestion = `Hi ${borrowRequest.borrower.username}! Your borrow request for "${borrowRequest.book.title}" has been accepted. Let's decide where to meet to exchange the book!`;
   res.redirect(`/chat/${borrowRequest.borrower._id}?suggestion=${encodeURIComponent(suggestion)}`);

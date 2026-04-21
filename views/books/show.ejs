@@ -168,9 +168,14 @@
 </div>
 
 <div class="text-center mt-3">
-  <% if (currentUserId && currentUserId.toString() !== ownerId.toString()) { %>
-    <!-- Wishlist toggle (only shown to non-owners; owning-a-book-you-also-wishlist
-         doesn't make sense in our platform). Heart state comes from the server
+  <%
+    // Hide wishlist button if user is already borrowing (approved request) —
+    // doesn't make sense to "wish for" a book you currently have.
+    const hasApprovedBorrow = userBorrowRequest && userBorrowRequest.status === 'approved';
+  %>
+  <% if (currentUserId && currentUserId.toString() !== ownerId.toString() && !hasApprovedBorrow) { %>
+    <!-- Wishlist toggle (only shown to non-owners who don't already have an
+         approved borrow for this copy). Heart state comes from the server
          so first paint matches ground truth with no flicker. -->
     <button
       id="wishlist-toggle"

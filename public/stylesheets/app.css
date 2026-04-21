@@ -407,3 +407,29 @@ a:hover { color: var(--bs-primary-hover); }
 .bs-theme-toggle .icon-light { display: none; }
 [data-theme="dark"] .bs-theme-toggle .icon-dark { display: none; }
 [data-theme="dark"] .bs-theme-toggle .icon-light { display: inline; }
+
+/* Nav link + count badge (wishlist). Inline-flex so the pill sits to the
+   right of the label. Keeps the click target as one unit. */
+.bs-nav-link-with-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.bs-nav-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.4rem;
+    height: 1.4rem;
+    padding: 0 0.4rem;
+    border-radius: var(--bs-radius-full, 999px);
+    background: var(--bs-primary);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1;
+}
+[data-theme="dark"] .bs-nav-badge {
+    background: var(--bs-primary);
+    color: #0f172a;
+}

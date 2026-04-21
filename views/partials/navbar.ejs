@@ -10,7 +10,12 @@
         <a href="/pdfs">Library</a>
         <a href="/curriculum">Curriculum</a>
         <% if (currentUser) { %>
-            <a href="/wishlist">Wishlist</a>
+            <a href="/wishlist" class="bs-nav-link-with-badge">
+              Wishlist
+              <% if (typeof wishlistCount !== 'undefined' && wishlistCount > 0) { %>
+                <span class="bs-nav-badge"><%= wishlistCount %></span>
+              <% } %>
+            </a>
             <a href="/chat">Chats</a>
         <% } %>
     </div>

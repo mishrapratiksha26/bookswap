@@ -167,6 +167,12 @@
                 <a href="/login">Login</a>
                 <a class="home-nav__cta" href="/register">Sign up</a>
             <% } else { %>
+                <a href="/wishlist" class="bs-nav-link-with-badge">
+                  Wishlist
+                  <% if (typeof wishlistCount !== 'undefined' && wishlistCount > 0) { %>
+                    <span class="bs-nav-badge"><%= wishlistCount %></span>
+                  <% } %>
+                </a>
                 <a href="/profile"><%= currentUser.username %></a>
                 <a href="/logout">Logout</a>
             <% } %>
