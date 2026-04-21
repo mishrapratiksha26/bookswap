@@ -662,6 +662,14 @@ app.post(
   validateReview,
   catchAsync(async (req, res) => {
     const book = await Book.findById(req.params.id);
+
+    // Defense-in-depth: the view hides the review form for owners, but a
+    // hand-crafted POST could still hit this route. Block it here too.
+    if (book.owner && book.owner.toString() === req.user._id.toString()) {
+      req.flash("error", "You can't review your own book.");
+      return res.redirect(`/books/${book._id}`);
+    }
+
     const review = new Review(req.body.review);
     review.author = req.user._id;
     book.reviews.push(review);

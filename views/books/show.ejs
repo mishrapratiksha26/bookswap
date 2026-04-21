@@ -240,7 +240,12 @@
 
     <!-- Review Section -->
     <div class="review-section">
-      <% if (currentUserId) { %>
+      <%
+        // Owners shouldn't rate their own book — obvious conflict of interest.
+        // Hide the form for them and show a small note instead.
+        const isOwner = currentUserId && currentUserId.toString() === ownerId.toString();
+      %>
+      <% if (currentUserId && !isOwner) { %>
         <div class="review-form mb-4">
           <h4>Leave a Review</h4>
           <form action="/books/<%= book._id %>/reviews" method="POST">
@@ -254,6 +259,10 @@
             </div>
             <button class="btn btn-gradient">Submit</button>
           </form>
+        </div>
+      <% } else if (isOwner) { %>
+        <div class="alert alert-info">
+          You posted this book, so you can't review it. Reviews come from people who've borrowed it.
         </div>
       <% } else { %>
         <div class="alert alert-warning">
