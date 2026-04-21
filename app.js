@@ -1152,7 +1152,10 @@ app.post("/curriculum", isLoggedIn, uploadPdf.single("pdf"), catchAsync(async (r
     });
 
     const matchData = aiResponse.data;
-    res.render("curriculum/results", { matchData, filename: req.file.originalname });
+    // NOTE: don't pass a local called `filename` — EJS treats that key as
+    // reserved (it's the internal template path used for error messages),
+    // and our value gets silently overridden. Use `uploadedFilename` instead.
+    res.render("curriculum/results", { matchData, uploadedFilename: req.file.originalname });
   } catch (e) {
     console.error("Curriculum match error:", e.message);
     req.flash("error", "Could not process the lecture plan. Please try again.");

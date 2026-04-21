@@ -19,7 +19,7 @@
       <% if (matchData.department) { %>
         <p class="text-muted mb-0"><%= matchData.department %></p>
       <% } %>
-      <p class="text-muted small mb-0">Parsed from <strong><%= filename || 'lecture plan' %></strong></p>
+      <p class="text-muted small mb-0">Parsed from <strong><%= uploadedFilename || 'lecture plan' %></strong></p>
     </div>
     <a href="/curriculum" class="btn btn-outline-secondary">Upload Another</a>
   </div>
