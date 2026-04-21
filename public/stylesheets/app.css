@@ -347,6 +347,39 @@ a:hover { color: var(--bs-primary-hover); }
 [data-theme="dark"] .candidate { border-color: var(--bs-border); }
 [data-theme="dark"] .candidate:hover { background: var(--bs-primary-light); }
 
+/* Profile page — has its own card/row classes with hardcoded light bgs.
+   Without these overrides you get light-on-light text (borrow request
+   titles disappear because <strong> inherits var(--bs-text) = light). */
+[data-theme="dark"] .profile-card,
+[data-theme="dark"] .request-card,
+[data-theme="dark"] .book-thumb {
+    background: var(--bs-surface) !important;
+    border-color: var(--bs-border) !important;
+    color: var(--bs-text);
+}
+[data-theme="dark"] .section {
+    border-bottom-color: var(--bs-border) !important;
+}
+[data-theme="dark"] .section h4 {
+    color: var(--bs-primary) !important;    /* keep the teal accent legible */
+}
+[data-theme="dark"] .book-thumb { background: var(--bs-surface-alt) !important; }
+[data-theme="dark"] .book-thumb-info p    { color: var(--bs-text) !important; }
+[data-theme="dark"] .book-thumb-info span { color: var(--bs-text-muted) !important; }
+[data-theme="dark"] .empty-msg            { color: var(--bs-text-subtle) !important; }
+[data-theme="dark"] .profile-header p     { color: #e5e7eb !important; }   /* username subtitle */
+
+/* Bootstrap's .text-muted is used liberally — retint for dark contrast */
+[data-theme="dark"] .text-muted,
+[data-theme="dark"] small.text-muted { color: var(--bs-text-muted) !important; }
+
+/* Status badges keep their semantic color but need readable text on dark.
+   Our dark-mode *-light tokens map to deep saturated backgrounds, so the
+   original dark text becomes invisible — swap it for the bright foreground. */
+[data-theme="dark"] .badge-pending  { background: var(--bs-warning-light) !important; color: #fde68a !important; }
+[data-theme="dark"] .badge-approved { background: var(--bs-success-light) !important; color: #bbf7d0 !important; }
+[data-theme="dark"] .badge-rejected { background: var(--bs-danger-light)  !important; color: #fecaca !important; }
+
 /* =========================================================================
    Theme-toggle button — lives in the navbar
    ========================================================================= */
