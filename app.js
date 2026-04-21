@@ -190,21 +190,60 @@ app.get("/books", catchAsync(async (req, res) => {
     if (min_rating) filter.avg_rating = { $gte: Number(min_rating) };   // denormalised avg
     if (available === 'true') filter.available = true;
 
-    // Sorting: default is newest (Mongo _id is time-ordered)
-    let sortSpec = { _id: -1 };
-    if (sort === 'rating') sortSpec = { avg_rating: -1, _id: -1 };
-    if (sort === 'title')  sortSpec = { title: 1 };
+    // -----------------------------------------------------------------
+    // CLUSTERING: group listings by normalised (title+author) so the same
+    // book listed by multiple owners shows up as ONE card. The card shows
+    // aggregate info ("3 of 5 copies available"), and clicking it leads
+    // to the cluster detail (books/show) where the user picks which
+    // specific owner's copy to borrow.
+    //
+    // Why normalise in Mongo (not Node): normalisation + grouping in a
+    // single aggregation is one DB round-trip; doing it in Node would
+    // require loading every listing matching `filter` and grouping
+    // client-side — fine now, painful at scale.
+    //
+    // We keep the post-cluster sort in the pipeline so it matches the
+    // user's chosen sort key (newest / rating / title).
+    // -----------------------------------------------------------------
+    let sortStage = { latest_id: -1 };                          // newest cluster first
+    if (sort === 'rating') sortStage = { avg_rating: -1, latest_id: -1 };
+    if (sort === 'title')  sortStage = { title: 1 };
 
-    const books = await Book.find(filter).sort(sortSpec);
+    const pipeline = [
+        { $match: filter },
+        { $addFields: {
+            // Normalise for grouping: lowercase, trim. Titles like
+            // "Clean Code " and "clean code" will cluster together.
+            _titleKey:  { $toLower: { $trim: { input: { $ifNull: ["$title",  ""] } } } },
+            _authorKey: { $toLower: { $trim: { input: { $ifNull: ["$author", ""] } } } }
+        }},
+        { $group: {
+            _id: { title: "$_titleKey", author: "$_authorKey" },
+            representative_id: { $first: "$_id" },              // card links here
+            title:      { $first: "$title" },
+            author:     { $first: "$author" },
+            genre:      { $first: "$genre" },
+            department: { $first: "$department" },
+            course:     { $first: "$course" },
+            description:{ $first: "$description" },
+            cover:      { $first: { $ifNull: [{ $arrayElemAt: ["$images.url", 0] }, null] } },
+            avg_rating: { $max: "$avg_rating" },                // best among copies
+            copies_total:     { $sum: 1 },
+            copies_available: { $sum: { $cond: [{ $eq: ["$available", true] }, 1, 0] } },
+            listing_ids: { $push: "$_id" },                     // for wishlist check
+            latest_id:   { $max: "$_id" }                       // sort key
+        }},
+        { $sort: sortStage }
+    ];
+    const clusters = await Book.aggregate(pipeline);
 
     // Populate datalist suggestions for the filter bar
     const distinctCourses     = (await Book.distinct('course')).filter(Boolean);
     const distinctDepartments = (await Book.distinct('department')).filter(Boolean);
 
-    // Load the set of book IDs this user has wishlisted — passed to the view
-    // so each card can render its heart icon in the correct saved/unsaved
-    // state on first paint (no flicker, no JS-after-load). Stored as a Set of
-    // string IDs because that's what the template uses for O(1) lookup.
+    // Load the set of book (listing) IDs this user has wishlisted. A
+    // cluster counts as "saved" if ANY of its listings is wishlisted —
+    // the template does that check. Kept as a Set<string> for O(1) lookup.
     let wishlistedIds = new Set();
     if (req.user) {
         const saved = await Wishlist.find({ user: req.user._id }).select('book');
@@ -212,7 +251,7 @@ app.get("/books", catchAsync(async (req, res) => {
     }
 
     res.render("books/index", {
-        books, searchResults, query: query || "", personalRecommendations,
+        clusters, searchResults, query: query || "", personalRecommendations,
         filters: { genre, author, department, course, year, min_rating, available, sort },
         distinctCourses, distinctDepartments,
         wishlistedIds
@@ -370,7 +409,42 @@ app.get(
         isWishlisted = !!w;
     }
 
-    res.render("books/show", { book, currentUserId, ownerId, similarBooks, activeBorrowRequest, userBorrowRequest, isWishlisted });
+    // ---------------------------------------------------------------
+    // CLUSTER SIBLINGS — "Other copies available"
+    // Find every OTHER listing with the same normalised (title, author).
+    // The show page becomes the cluster detail view: user sees this copy
+    // in full + a list of other owners they could borrow from instead.
+    // Sort by availability-first so borrowable copies float to the top.
+    // ---------------------------------------------------------------
+    const titleKey  = (book.title  || '').trim().toLowerCase();
+    const authorKey = (book.author || '').trim().toLowerCase();
+    const otherCopies = await Book.aggregate([
+        { $match: { _id: { $ne: book._id } } },
+        { $addFields: {
+            _titleKey:  { $toLower: { $trim: { input: { $ifNull: ["$title",  ""] } } } },
+            _authorKey: { $toLower: { $trim: { input: { $ifNull: ["$author", ""] } } } }
+        }},
+        { $match: { _titleKey: titleKey, _authorKey: authorKey } },
+        { $lookup: {
+            from: "users",
+            localField: "owner",
+            foreignField: "_id",
+            as: "owner_doc"
+        }},
+        { $addFields: { owner_doc: { $arrayElemAt: ["$owner_doc", 0] } } },
+        { $project: {
+            _id: 1, title: 1, author: 1, available: 1, avg_rating: 1,
+            images: 1, price: 1,
+            "owner_doc._id": 1, "owner_doc.username": 1
+        }},
+        { $sort: { available: -1, _id: -1 } }                  // available first
+    ]);
+
+    res.render("books/show", {
+        book, currentUserId, ownerId, similarBooks,
+        activeBorrowRequest, userBorrowRequest, isWishlisted,
+        otherCopies
+    });
   })
 );
 

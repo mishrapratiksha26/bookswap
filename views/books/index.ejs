@@ -369,35 +369,78 @@
   <hr class="divider">
 <% } %>
 
-<!-- All Books -->
+<!-- All Books (clustered — one card per unique title+author) -->
 <p class="section-label">All Books</p>
 <div class="book-grid">
-  <% for (let book of books) { %>
+  <% for (let cluster of clusters) { %>
+    <%
+      // A cluster is "saved" if ANY of its listings is in the user's
+      // wishlist. Heart toggle targets the representative listing —
+      // consistent with what the show page displays.
+      let clusterSaved = false;
+      if (currentUser && wishlistedIds) {
+          clusterSaved = cluster.listing_ids.some(id => wishlistedIds.has(id.toString()));
+      }
+      const availBadgeClass = cluster.copies_available > 0 ? 'bs-badge--success' : 'bs-badge--danger';
+      const availText = cluster.copies_available > 0
+          ? `${cluster.copies_available} of ${cluster.copies_total} available`
+          : `All ${cluster.copies_total} borrowed`;
+    %>
     <div class="card">
       <% if (currentUser) { %>
-        <% const saved = wishlistedIds && wishlistedIds.has(book._id.toString()); %>
         <button
-          class="bs-wishlist-heart <%= saved ? 'is-saved' : '' %>"
-          onclick="toggleWishlist('<%= book._id %>', this, false)"
-          title="<%= saved ? 'Remove from wishlist' : 'Add to wishlist' %>">
-          <%= saved ? '❤️' : '🤍' %>
+          class="bs-wishlist-heart <%= clusterSaved ? 'is-saved' : '' %>"
+          onclick="toggleWishlist('<%= cluster.representative_id %>', this, false)"
+          title="<%= clusterSaved ? 'Remove from wishlist' : 'Add to wishlist' %>">
+          <%= clusterSaved ? '❤️' : '🤍' %>
         </button>
       <% } %>
-      <% if (book.images.length) { %>
-        <img class="card-img-top" alt="Book cover" src="<%= book.images[0].url %>">
+
+      <% if (cluster.copies_total > 1) { %>
+        <span class="copies-chip">📚 <%= cluster.copies_total %> copies</span>
+      <% } %>
+
+      <% if (cluster.cover) { %>
+        <img class="card-img-top" alt="Book cover" src="<%= cluster.cover %>">
       <% } else { %>
         <img class="card-img-top" alt="Default cover" src="https://res.cloudinary.com/douqbebwk/image/upload/v1600103881/YelpCamp/lz8jjv2gyynjil7lswf4.png">
       <% } %>
       <div class="card-body">
         <div>
-          <h5 class="card-title"><%= book.title %></h5>
-          <p class="card-text description-snippet"><%= book.description %></p>
+          <h5 class="card-title"><%= cluster.title %></h5>
+          <p class="card-author"><%= cluster.author %></p>
+          <span class="bs-badge <%= availBadgeClass %>"><%= availText %></span>
+          <p class="card-text description-snippet" style="margin-top: 0.8rem;"><%= cluster.description %></p>
         </div>
-        <a href="/books/<%= book._id %>" class="btn-primary">View Details</a>
+        <a href="/books/<%= cluster.representative_id %>" class="btn-primary">View Details</a>
       </div>
     </div>
   <% } %>
 </div>
+
+<style>
+  /* Cluster-card extras — author line + "N copies" chip for multi-owner books */
+  .card-author {
+    text-align: center;
+    color: #666;
+    font-size: 0.85rem;
+    margin: -0.25rem 0 0.6rem;
+    font-style: italic;
+  }
+  .copies-chip {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    background: rgba(15, 118, 110, 0.95);
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25rem 0.6rem;
+    border-radius: 12px;
+    z-index: 2;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  }
+</style>
 
 <script>
     // Shared heart-toggle for every card on this page. Uses our design-system

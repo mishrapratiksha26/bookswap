@@ -70,6 +70,69 @@
     .book-section { flex-direction: column; }
     .book-card, .review-section { flex: 1 1 100%; }
   }
+
+  /* Cluster — "Other copies available from…" */
+  .copies-section {
+    background: #fff;
+    border-radius: 16px;
+    padding: 1.8rem;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+    margin-top: 2.5rem;
+  }
+  .copies-section h3 {
+    font-weight: 600;
+    color: #222;
+    margin: 0 0 0.4rem;
+    font-size: 1.2rem;
+  }
+  .copies-section .hint {
+    color: #666;
+    font-size: 0.88rem;
+    margin: 0 0 1.2rem;
+  }
+  .copy-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    margin-bottom: 0.6rem;
+    transition: all 0.15s;
+  }
+  .copy-row:hover { border-color: #0f766e; background: #f0fdfa; }
+  .copy-owner {
+    font-weight: 600;
+    color: #1f2937;
+    font-size: 0.95rem;
+  }
+  .copy-meta {
+    color: #6b7280;
+    font-size: 0.82rem;
+    margin-top: 0.1rem;
+  }
+  .copy-status {
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.25rem 0.7rem;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .copy-status--available { background: #d1fae5; color: #065f46; }
+  .copy-status--borrowed  { background: #fee2e2; color: #991b1b; }
+  .copy-actions { display: flex; gap: 0.5rem; align-items: center; }
+  .copy-view-btn {
+    background: #0f766e;
+    color: #fff !important;
+    padding: 0.4rem 0.9rem;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: background 0.2s;
+  }
+  .copy-view-btn:hover { background: #115e59; }
 </style>
 
 <div class="container py-5">
@@ -246,6 +309,47 @@
         }
     }
   </script>
+
+  <!-- Other Copies (cluster siblings) ─────────────────────────────
+       Shown when the same title+author has been listed by other owners.
+       Borrow flow stays per-listing — user clicks a specific copy's
+       "View" link to go to that listing's detail page, where the normal
+       borrow/chat/review machinery kicks in. This preserves the existing
+       BorrowRequest → owner pairing without having to refactor it.
+       ──────────────────────────────────────────────────────────────── -->
+  <% if (otherCopies && otherCopies.length > 0) { %>
+    <div class="copies-section">
+      <h3>📚 Other copies of this book</h3>
+      <p class="hint">
+        <%= otherCopies.length %> other
+        <%= otherCopies.length === 1 ? 'student has' : 'students have' %>
+        listed this book. Check who has it available now.
+      </p>
+      <% otherCopies.forEach(copy => { %>
+        <div class="copy-row">
+          <div>
+            <div class="copy-owner">
+              <%= copy.owner_doc ? copy.owner_doc.username : 'Unknown' %>
+            </div>
+            <div class="copy-meta">
+              <% if (typeof copy.avg_rating === 'number' && copy.avg_rating > 0) { %>
+                ⭐ <%= copy.avg_rating.toFixed(1) %> ·
+              <% } %>
+              ₹<%= copy.price %>
+            </div>
+          </div>
+          <div class="copy-actions">
+            <% if (copy.available) { %>
+              <span class="copy-status copy-status--available">✅ Available</span>
+            <% } else { %>
+              <span class="copy-status copy-status--borrowed">❌ Borrowed</span>
+            <% } %>
+            <a class="copy-view-btn" href="/books/<%= copy._id %>">View</a>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+  <% } %>
 
   <!-- Similar Books -->
   <% if (similarBooks && similarBooks.length > 0) { %>
