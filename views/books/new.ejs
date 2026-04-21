@@ -1,27 +1,25 @@
-        <% layout('layouts/boilerplate')%>
+<% layout('layouts/boilerplate')%>
 <div class="row">
     <h1 class="text-center">New Book</h1>
     <div class="col-md-6 offset-md-3">
         <form action="/books" method="POST" novalidate class="validated-form" enctype="multipart/form-data">
+
             <div class="mb-3">
-                <li class="list-group-item"> <div class="mb-3 form-group">
-                    <label class="form-label" for="title">Title: </label>
-                        <input class="form-control" type="text" id="title" name="book[title]" required>
-                   <div class="valid-feedback">
-                    looks good!
-                   </div>
+                <label class="form-label" for="title">Title: </label>
+                <input class="form-control" type="text" id="title" name="book[title]" required>
+                <div class="valid-feedback">looks good!</div>
             </div>
+
             <div class="mb-3">
                 <label class="form-label" for="author">Author: </label>
                 <input class="form-control" type="text" id="author" name="book[author]" required>
-                <div class="valid-feedback">
-                    looks good!
-                   </div>
+                <div class="valid-feedback">looks good!</div>
             </div>
 
             <div class="mb-3">
                 <label class="input-group-text" for="inputGroupSelect01">Genre:</label>
-                <select class="form-select" id="inputGroupSelect01" name="book[genre]" required>
+                <select class="form-select" id="inputGroupSelect01" name="book[genre]" required
+                        onchange="toggleEducationalFields(this.value)">
                     <option selected></option>
                     <option value="ACTION AND ADVENTURE">Adventure</option>
                     <option value="AUTOBIOGRAPHY/BIOGRAPHY">Autobiography/Biography</option>
@@ -34,10 +32,52 @@
                     <option value="FICTION">Fiction</option>
                     <option value="HISTORY">History</option>
                 </select>
-                <div class="valid-feedback">
-                    Looks good!
+                <div class="valid-feedback">Looks good!</div>
+            </div>
+
+            <!-- ====================================================== -->
+            <!-- Conditional academic fields — only shown if EDUCATIONAL -->
+            <!-- ====================================================== -->
+            <div id="educational-fields" style="display: none;">
+                <div class="alert alert-info py-2 small">
+                    📚 Academic book — help fellow students find it by course &amp; department.
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="course">Course Code:</label>
+                    <input class="form-control" type="text" id="course" name="book[course]"
+                           list="course-list" placeholder="e.g. MCO502">
+                    <datalist id="course-list">
+                        <% if (typeof distinctCourses !== 'undefined') { %>
+                            <% distinctCourses.forEach(c => { %>
+                                <option value="<%= c %>"></option>
+                            <% }) %>
+                        <% } %>
+                    </datalist>
+                    <div class="form-text">Suggestions come from existing books</div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label" for="department">Department:</label>
+                    <input class="form-control" type="text" id="department" name="book[department]"
+                           list="dept-list" placeholder="e.g. Mathematics and Computing">
+                    <datalist id="dept-list">
+                        <% if (typeof distinctDepartments !== 'undefined') { %>
+                            <% distinctDepartments.forEach(d => { %>
+                                <option value="<%= d %>"></option>
+                            <% }) %>
+                        <% } %>
+                    </datalist>
                 </div>
             </div>
+
+            <!-- Publication year — shown for all books, but optional -->
+            <div class="mb-3">
+                <label class="form-label" for="publication_year">Publication Year (optional):</label>
+                <input class="form-control" type="number" id="publication_year"
+                       name="book[publication_year]" min="1800" max="2100" placeholder="e.g. 2017">
+            </div>
+
             <div class="mb-3">
                 <div class="form-file custom-file">
                     <input type="file" class="form-file-input" id="image" name="image" multiple>
@@ -47,32 +87,38 @@
                     </label>
                 </div>
             </div>
+
             <div class="mb-3">
                 <label class="form-label" for="description">Book description:</label>
                 <textarea class="form-control" type="text" id="description" name="book[description]" required></textarea>
-                <div class="valid-feedback">
-                    looks good!
-                   </div>
+                <div class="valid-feedback">looks good!</div>
             </div>
-            
+
             <div class="mb-3">
                 <label class="form-label" for="price">Original Price:</label>
                 <div class="input-group">
                     <span class="input-group-text" id="price-label">&#x20b9;</span>
-                    <input type="text" class="form-control" placeholder="0" id="price" aria-label="price" aria-describedby="price-label" name="book[price]" required>
-                    <div class="valid-feedback">
-                        looks good!
-                       </div> 
+                    <input type="text" class="form-control" placeholder="0" id="price"
+                           aria-label="price" aria-describedby="price-label" name="book[price]" required>
+                    <div class="valid-feedback">looks good!</div>
+                </div>
             </div>
-            
-
 
             <div class="mb-3">
                 <button class="btn btn-success my-2">Post book</button>
             </div>
         </form>
         <div class="mb-3">
-        <a href="/books">All Books</a>
+            <a href="/books">All Books</a>
         </div>
     </div>
 </div>
+
+<script>
+    // Show/hide course+department fields based on genre selection.
+    // Only educational books need course/dept metadata.
+    function toggleEducationalFields(genre) {
+        const block = document.getElementById('educational-fields');
+        block.style.display = (genre === 'EDUCATIONAL') ? 'block' : 'none';
+    }
+</script>

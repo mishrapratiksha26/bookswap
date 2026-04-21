@@ -6,6 +6,10 @@ module.exports.bookSchema =Joi.object({
         genre:Joi.string().required(),
         description:Joi.string().required(),
         price:Joi.number().required().min(0),
+        // Optional academic metadata — only filled for genre = EDUCATIONAL
+        course:Joi.string().allow('').optional(),
+        department:Joi.string().allow('').optional(),
+        publication_year:Joi.number().integer().min(1800).max(2100).optional().allow('')
     }).required(),
     deleteImages:Joi.array()
 })

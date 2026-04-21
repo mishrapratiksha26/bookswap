@@ -1,17 +1,30 @@
 <%- layout('layouts/boilerplate') %>
 
 <div class="container mt-4">
-  <div class="d-flex justify-content-between align-items-start mb-3">
+
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-start mb-4">
     <div>
-      <h2>🎓 Curriculum Match Results</h2>
-      <p class="text-muted mb-0">
-        Found <strong><%= matchData.topics_found %></strong> topics in
-        <strong><%= filename || 'lecture plan' %></strong>
-      </p>
+      <h2 class="mb-1">
+        📘
+        <% if (matchData.course_name) { %>
+          <%= matchData.course_name %>
+          <% if (matchData.course_code) { %>
+            <span class="text-muted">(<%= matchData.course_code %>)</span>
+          <% } %>
+        <% } else { %>
+          Curriculum Match Results
+        <% } %>
+      </h2>
+      <% if (matchData.department) { %>
+        <p class="text-muted mb-0"><%= matchData.department %></p>
+      <% } %>
+      <p class="text-muted small mb-0">Parsed from <strong><%= filename || 'lecture plan' %></strong></p>
     </div>
     <a href="/curriculum" class="btn btn-outline-secondary">Upload Another</a>
   </div>
 
+  <!-- Error -->
   <% if (matchData.error) { %>
     <div class="alert alert-danger">
       <strong>Could not process PDF:</strong> <%= matchData.error %>
@@ -19,69 +32,200 @@
     </div>
   <% } %>
 
-  <% if (matchData.topics && matchData.topics.length > 0) { %>
-    <!-- Topics extracted -->
-    <div class="mb-4">
-      <h5 class="text-muted">Topics Extracted</h5>
-      <div class="d-flex flex-wrap gap-2">
-        <% matchData.topics.forEach(topic => { %>
-          <span class="badge bg-light text-dark border"><%= topic %></span>
+  <!-- ============================================================== -->
+  <!-- SECTION 1 — Professor's Recommended Books                       -->
+  <!-- ============================================================== -->
+  <% if (matchData.recommended_books && matchData.recommended_books.length > 0) { %>
+    <div class="mb-5">
+      <h4 class="mb-3">🎓 Professor's Recommended Books</h4>
+      <p class="text-muted small mb-3">
+        These are the textbooks &amp; references listed in your lecture plan. We checked our library for each.
+      </p>
+
+      <div class="row g-3">
+        <% matchData.recommended_books.forEach(rec => { %>
+          <div class="col-md-6">
+            <div class="card h-100 border <%= rec.found ? 'border-success' : 'border-secondary' %>">
+              <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <% if (rec.found) { %>
+                    <span class="badge bg-success">✅ Found in library</span>
+                  <% } else { %>
+                    <span class="badge bg-secondary">❌ Not in library</span>
+                  <% } %>
+                  <% if (rec.match_score > 0) { %>
+                    <small class="text-muted"><%= Math.round(rec.match_score * 100) %>% match</small>
+                  <% } %>
+                </div>
+
+                <h6 class="card-title mb-1">
+                  <% if (rec.found && rec.book_title) { %>
+                    <%= rec.book_title %>
+                  <% } else { %>
+                    <%= rec.recommended_title %>
+                  <% } %>
+                </h6>
+
+                <% if (rec.found && rec.book_author) { %>
+                  <p class="text-muted small mb-2"><%= rec.book_author %></p>
+                <% } %>
+
+                <p class="text-muted small mb-2">
+                  <strong>Professor wrote:</strong> <em><%= rec.recommended_title %></em>
+                </p>
+
+                <% if (rec.found) { %>
+                  <div class="mt-2">
+                    <% if (rec.available) { %>
+                      <span class="badge bg-light text-success border border-success">📗 Available to borrow</span>
+                    <% } else { %>
+                      <span class="badge bg-light text-danger border border-danger">📕 Currently borrowed</span>
+                    <% } %>
+                    <a href="/books/<%= rec.book_id %>" class="btn btn-sm btn-outline-primary ms-2">View →</a>
+                  </div>
+                <% } else { %>
+                  <p class="small text-muted mb-0 mt-2">
+                    We'll recommend alternatives for each unit below.
+                  </p>
+                <% } %>
+              </div>
+            </div>
+          </div>
         <% }) %>
       </div>
     </div>
+  <% } %>
 
-    <!-- Matches -->
-    <h5 class="mb-3">Book Recommendations by Topic</h5>
-    <div class="table-responsive">
-      <table class="table table-hover align-middle">
-        <thead class="table-light">
-          <tr>
-            <th>Lecture Topic</th>
-            <th>Recommended Book</th>
-            <th>Author</th>
-            <th>Match</th>
-            <th>Suggested Chapter</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          <% matchData.matches.forEach(match => { %>
-            <tr>
-              <td><strong><%= match.topic %></strong></td>
-              <td><%= match.book_title %></td>
-              <td class="text-muted"><small><%= match.book_author %></small></td>
-              <td>
-                <div class="progress" style="height: 6px; width: 60px;">
-                  <div class="progress-bar bg-success" style="width: <%= Math.round(match.match_score * 100) %>%"></div>
+  <!-- ============================================================== -->
+  <!-- SECTION 2 — Unit → Chapter Map                                   -->
+  <!-- ============================================================== -->
+  <% if (matchData.unit_matches && matchData.unit_matches.length > 0) { %>
+    <div class="mb-5">
+      <h4 class="mb-3">📑 Unit → Chapter Map</h4>
+      <p class="text-muted small mb-3">
+        For each unit in your syllabus, we've identified the best book and specific chapter.
+      </p>
+
+      <% matchData.unit_matches.forEach(unit => { %>
+        <div class="card mb-3 shadow-sm">
+          <div class="card-body">
+
+            <!-- Unit heading -->
+            <div class="mb-2">
+              <h5 class="mb-0">
+                <% if (unit.unit_no) { %>
+                  <span class="text-muted">Unit <%= unit.unit_no %> —</span>
+                <% } %>
+                <%= unit.unit_title %>
+              </h5>
+            </div>
+
+            <!-- Book title + source badge -->
+            <div class="mb-2">
+              <strong>📘 <%= unit.book_title %></strong>
+              <% if (unit.book_author) { %>
+                <span class="text-muted">— <%= unit.book_author %></span>
+              <% } %>
+
+              <% if (unit.source === 'professor_recommended') { %>
+                <span class="badge bg-success ms-2">🎓 Professor-recommended</span>
+              <% } else { %>
+                <span class="badge bg-info text-dark ms-2">🤖 AI-suggested</span>
+                <small class="text-muted d-block mt-1">
+                  Professor's recommended book was not available — this is the closest alternative in our library.
+                </small>
+              <% } %>
+            </div>
+
+            <!-- Chapter + page + confidence -->
+            <% if (unit.suggested_chapter) { %>
+              <div class="mb-2 ps-3 border-start border-3 border-primary">
+                <p class="mb-1">
+                  <strong>Chapter:</strong> <%= unit.suggested_chapter %>
+                </p>
+
+                <% if (unit.chapter_source === 'pdf' && unit.chapter_page) { %>
+                  <span class="badge bg-success">
+                    📍 Page <%= unit.chapter_page %> — from PDF index (accurate)
+                  </span>
+                <% } else if (unit.chapter_source === 'pdf') { %>
+                  <span class="badge bg-primary">
+                    📄 From PDF table of contents
+                  </span>
+                <% } else if (unit.chapter_source === 'physical') { %>
+                  <span class="badge bg-warning text-dark">
+                    📖 Chapter title only — check book's index for page
+                  </span>
+                <% } else if (unit.chapter_source === 'ai_guess') { %>
+                  <span class="badge bg-warning text-dark">
+                    🤖 AI-estimated (<%= unit.chapter_confidence || 'low' %> confidence)
+                  </span>
+                  <small class="text-muted d-block mt-1">
+                    Chapter guessed from book metadata — verify from the book's index.
+                  </small>
+                <% } %>
+              </div>
+            <% } else { %>
+              <p class="text-muted small mb-2 ps-3 border-start border-3 border-secondary">
+                No chapter info available — book is still listed below.
+              </p>
+            <% } %>
+
+            <!-- Match score -->
+            <div class="mb-2">
+              <div class="d-flex align-items-center gap-2">
+                <small class="text-muted">Topic match:</small>
+                <div class="progress" style="height: 6px; width: 100px;">
+                  <div class="progress-bar bg-success" style="width: <%= Math.round(unit.match_score * 100) %>%"></div>
                 </div>
-                <small class="text-muted"><%= Math.round(match.match_score * 100) %>%</small>
-              </td>
-              <td>
-                <% if (match.suggested_chapter) { %>
-                  <small class="text-primary">📄 <%= match.suggested_chapter %></small>
-                  <small class="text-muted d-block">(<%= Math.round(match.chapter_score * 100) %>% match)</small>
-                <% } else { %>
-                  <small class="text-muted">—</small>
-                <% } %>
-              </td>
-              <td>
-                <% if (match.book_id) { %>
-                  <a href="/books/<%= match.book_id %>" class="btn btn-sm btn-outline-primary">View Book</a>
-                <% } %>
-              </td>
-            </tr>
-          <% }) %>
-        </tbody>
-      </table>
+                <small class="text-muted"><%= Math.round(unit.match_score * 100) %>%</small>
+              </div>
+            </div>
+
+            <!-- Formats available -->
+            <% if (unit.formats_available && unit.formats_available.length > 0) { %>
+              <div class="mt-3">
+                <small class="text-muted d-block mb-2">How to access:</small>
+
+                <% unit.formats_available.forEach(fmt => { %>
+                  <% if (fmt.type === 'physical') { %>
+                    <a href="/books/<%= fmt.book_id %>"
+                       class="btn btn-sm <%= fmt.available ? 'btn-outline-success' : 'btn-outline-secondary' %> me-2 mb-1">
+                      📗 Borrow hard copy
+                      <% if (fmt.available) { %>
+                        <span class="badge bg-success ms-1">Available</span>
+                      <% } else { %>
+                        <span class="badge bg-secondary ms-1">Borrowed</span>
+                      <% } %>
+                    </a>
+                  <% } else if (fmt.type === 'pdf') { %>
+                    <a href="/pdfs/<%= fmt.pdf_id %>"
+                       class="btn btn-sm btn-outline-primary me-2 mb-1">
+                      📄 Open PDF
+                      <% if (fmt.page_accurate) { %>
+                        <span class="badge bg-primary ms-1">Page-accurate</span>
+                      <% } %>
+                    </a>
+                  <% } %>
+                <% }) %>
+              </div>
+            <% } %>
+
+          </div>
+        </div>
+      <% }) %>
     </div>
   <% } else if (!matchData.error) { %>
     <div class="alert alert-warning">
-      No topics could be extracted. Try uploading a text-based PDF (not scanned).
+      No units could be extracted from your lecture plan. Try a text-based PDF (not scanned).
     </div>
   <% } %>
 
-  <div class="mt-3">
+  <!-- Footer nav -->
+  <div class="mt-4 mb-5">
     <a href="/pdfs" class="btn btn-outline-secondary me-2">Browse Digital Library</a>
+    <a href="/books" class="btn btn-outline-secondary me-2">Browse All Books</a>
     <a href="/" class="btn btn-outline-primary">Back to Home</a>
   </div>
+
 </div>

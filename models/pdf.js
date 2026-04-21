@@ -65,9 +65,15 @@ const pdfSchema = new mongoose.Schema({
         type: [Number],
         default: []
     },
-    // Set by Python chapter extractor
+    // Set by Python chapter extractor.
+    // Each entry: { title: "Chapter 6: Dynamic Programming", page: 287 }
+    // page may be null when the PDF has no embedded TOC and we fell back
+    // to heuristic scanning (Tier 2). See chapter_extractor.py.
     chapter_headings: {
-        type: [String],
+        type: [{
+            title: { type: String },
+            page:  { type: Number, default: null }
+        }],
         default: []
     },
     download_count: {

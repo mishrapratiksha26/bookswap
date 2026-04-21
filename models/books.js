@@ -43,7 +43,27 @@ const BookSchema = new Schema({
       type:Schema.Types.ObjectId,
       ref:'Review'
    }],
-   available: { type: Boolean, default: true }
+   available: { type: Boolean, default: true },
+
+   // ---------------------------------------------------------------
+   // Academic metadata — optional fields, filled only for educational
+   // books (when owner picks genre = EDUCATIONAL on the upload form).
+   // Enables filtering by course / department / year on the index page
+   // and powers the curriculum matcher's book-search by department.
+   // ---------------------------------------------------------------
+   course:           { type: String },   // e.g. "MCO502"
+   department:       { type: String },   // e.g. "Mathematics and Computing"
+   publication_year: { type: Number },   // e.g. 2017
+
+   // ---------------------------------------------------------------
+   // avg_rating: denormalised average of all reviews on this book.
+   // Why denormalise: the books index page sorts/filters by rating.
+   // Computing it via aggregation on every request = slow at scale.
+   // Instead we update this field once, when a review is posted /
+   // deleted (POST /books/:id/reviews route updates it).
+   // Default 0 = "no reviews yet" — filter logic treats 0 as neutral.
+   // ---------------------------------------------------------------
+   avg_rating:       { type: Number, default: 0 }
 
 });
 

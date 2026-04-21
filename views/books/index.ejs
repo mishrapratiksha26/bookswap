@@ -216,15 +216,107 @@
 
 <!-- Search Bar -->
 <form class="search-container" action="/books" method="GET">
-  <input 
-    class="search-input" 
-    type="text" 
-    name="query" 
-    placeholder="Search by meaning... try 'inspirational story' or 'thrilling mystery'" 
+  <input
+    class="search-input"
+    type="text"
+    name="query"
+    placeholder="Search by meaning... try 'inspirational story' or 'thrilling mystery'"
     value="<%= query %>"
   >
   <button class="search-btn" type="submit">Search</button>
 </form>
+
+<!-- Filter Bar -->
+<form class="filter-container" action="/books" method="GET">
+  <input type="hidden" name="query" value="<%= query %>">
+
+  <select name="genre" class="filter-select">
+    <option value="">All Genres</option>
+    <% const genres = ["ACTION AND ADVENTURE","AUTOBIOGRAPHY/BIOGRAPHY","SUSPENSE/THRILLERS","EDUCATIONAL","DETECTIVE AND MYSTERY","RELIGIOUS","HORROR","ROMANCE","FICTION","HISTORY"]; %>
+    <% genres.forEach(g => { %>
+      <option value="<%= g %>" <%= (typeof filters !== 'undefined' && filters.genre === g) ? 'selected' : '' %>><%= g %></option>
+    <% }) %>
+  </select>
+
+  <input type="text" name="author" class="filter-input" placeholder="Author..."
+         value="<%= (typeof filters !== 'undefined' && filters.author) || '' %>">
+
+  <input type="text" name="department" class="filter-input" list="filter-dept-list"
+         placeholder="Department..."
+         value="<%= (typeof filters !== 'undefined' && filters.department) || '' %>">
+  <datalist id="filter-dept-list">
+    <% if (typeof distinctDepartments !== 'undefined') { %>
+      <% distinctDepartments.forEach(d => { %>
+        <option value="<%= d %>"></option>
+      <% }) %>
+    <% } %>
+  </datalist>
+
+  <input type="text" name="course" class="filter-input" list="filter-course-list"
+         placeholder="Course code..."
+         value="<%= (typeof filters !== 'undefined' && filters.course) || '' %>">
+  <datalist id="filter-course-list">
+    <% if (typeof distinctCourses !== 'undefined') { %>
+      <% distinctCourses.forEach(c => { %>
+        <option value="<%= c %>"></option>
+      <% }) %>
+    <% } %>
+  </datalist>
+
+  <input type="number" name="year" class="filter-input" style="width: 100px;"
+         placeholder="Year"
+         value="<%= (typeof filters !== 'undefined' && filters.year) || '' %>">
+
+  <select name="min_rating" class="filter-select">
+    <option value="">Any Rating</option>
+    <option value="4" <%= (typeof filters !== 'undefined' && filters.min_rating == '4') ? 'selected' : '' %>>4★ &amp; up</option>
+    <option value="3" <%= (typeof filters !== 'undefined' && filters.min_rating == '3') ? 'selected' : '' %>>3★ &amp; up</option>
+    <option value="2" <%= (typeof filters !== 'undefined' && filters.min_rating == '2') ? 'selected' : '' %>>2★ &amp; up</option>
+  </select>
+
+  <label class="filter-check">
+    <input type="checkbox" name="available" value="true"
+      <%= (typeof filters !== 'undefined' && filters.available === 'true') ? 'checked' : '' %>>
+    Available only
+  </label>
+
+  <select name="sort" class="filter-select">
+    <option value="">Sort: Newest</option>
+    <option value="rating" <%= (typeof filters !== 'undefined' && filters.sort === 'rating') ? 'selected' : '' %>>Top Rated</option>
+    <option value="title"  <%= (typeof filters !== 'undefined' && filters.sort === 'title')  ? 'selected' : '' %>>Title A→Z</option>
+  </select>
+
+  <button type="submit" class="filter-btn">Apply</button>
+  <a href="/books" class="filter-clear">Clear</a>
+</form>
+
+<style>
+  .filter-container {
+    max-width: 1300px;
+    margin: 0 auto 2.5rem;
+    padding: 1rem 1.5rem;
+    display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;
+    background: rgba(255,255,255,0.6);
+    border-radius: 12px;
+    border: 1px solid #e1e7e2;
+  }
+  .filter-select, .filter-input {
+    padding: 8px 12px; border-radius: 8px; border: 1px solid #c8d6cd;
+    font-family: 'Poppins', sans-serif; font-size: 0.9rem; outline: none;
+    min-width: 120px;
+  }
+  .filter-select:focus, .filter-input:focus {
+    border-color: #00a98f; box-shadow: 0 0 0 2px rgba(0,169,143,0.15);
+  }
+  .filter-check { display: flex; align-items: center; gap: 4px; font-size: 0.9rem; color: #555; padding: 0 8px; }
+  .filter-btn {
+    padding: 8px 18px; background: #00a98f; color: white; border: none;
+    border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+  }
+  .filter-btn:hover { background: #008f7a; }
+  .filter-clear { color: #888; font-size: 0.9rem; text-decoration: none; padding: 8px 12px; }
+  .filter-clear:hover { color: #00a98f; }
+</style>
 
 <!-- Search Results -->
 <% if (searchResults && searchResults.length > 0) { %>

@@ -17,11 +17,28 @@
     <div class="row mb-3">
       <div class="col">
         <label class="form-label fw-semibold">Course Code</label>
-        <input type="text" name="course" class="form-control" placeholder="e.g. CS301">
+        <input type="text" name="course" class="form-control"
+               list="course-list" placeholder="e.g. CS301">
+        <datalist id="course-list">
+          <% if (typeof distinctCourses !== 'undefined') { %>
+            <% distinctCourses.forEach(c => { %>
+              <option value="<%= c %>"></option>
+            <% }) %>
+          <% } %>
+        </datalist>
+        <div class="form-text">Start typing — suggestions come from existing uploads</div>
       </div>
       <div class="col">
         <label class="form-label fw-semibold">Department</label>
-        <input type="text" name="department" class="form-control" placeholder="e.g. CSE">
+        <input type="text" name="department" class="form-control"
+               list="dept-list" placeholder="e.g. CSE">
+        <datalist id="dept-list">
+          <% if (typeof distinctDepartments !== 'undefined') { %>
+            <% distinctDepartments.forEach(d => { %>
+              <option value="<%= d %>"></option>
+            <% }) %>
+          <% } %>
+        </datalist>
       </div>
     </div>
 

@@ -129,10 +129,10 @@ app.use((req, res, next) => {
 });
 
 app.get("/books", catchAsync(async (req, res) => {
-    const { query } = req.query;
+    const { query, genre, author, department, course, year, min_rating, available, sort } = req.query;
     let searchResults = [];
     let personalRecommendations = [];
-    
+
     if (query && query.trim() !== "") {
         const response = await fetch(`${process.env.AI_SERVICE_URL}/search`, {
             method: "POST",
@@ -149,10 +149,10 @@ app.get("/books", catchAsync(async (req, res) => {
             if (user.borrowedBooks && user.borrowedBooks.length > 0) {
                 const populatedUser = await User.findById(req.user._id).populate('borrowedBooks');
                 const Review = require('./models/review');
-                
+
                 const booksWithRatings = await Promise.all(
                     populatedUser.borrowedBooks.map(async (book) => {
-                        const review = await Review.findOne({ 
+                        const review = await Review.findOne({
                             author: req.user._id,
                             _id: { $in: book.reviews }
                         });
@@ -162,7 +162,6 @@ app.get("/books", catchAsync(async (req, res) => {
                         };
                     })
                 );
-                console.log("booksWithRatings:", booksWithRatings);
                 const response = await fetch(`${process.env.AI_SERVICE_URL}/recommend-personal`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -170,16 +169,42 @@ app.get("/books", catchAsync(async (req, res) => {
                 });
                 const data = await response.json();
                 personalRecommendations = data.results;
-                console.log("Personal recommendations data:", data);
-                personalRecommendations = data.results;
-              }
+            }
         } catch (err) {
             console.log("Personal recommendations failed:", err);
         }
     }
-    
-    const books = await Book.find({});
-    res.render("books/index", { books, searchResults, query: query || "", personalRecommendations });
+
+    // -----------------------------------------------------------------
+    // Build MongoDB filter from query-string params.
+    // Each filter is only applied when the corresponding param is set,
+    // so an unfiltered /books still returns everything.
+    // -----------------------------------------------------------------
+    const filter = {};
+    if (genre)      filter.genre      = genre;
+    if (author)     filter.author     = new RegExp(author, 'i');        // case-insensitive substring
+    if (department) filter.department = new RegExp(department, 'i');
+    if (course)     filter.course     = new RegExp(course, 'i');
+    if (year)       filter.publication_year = Number(year);
+    if (min_rating) filter.avg_rating = { $gte: Number(min_rating) };   // denormalised avg
+    if (available === 'true') filter.available = true;
+
+    // Sorting: default is newest (Mongo _id is time-ordered)
+    let sortSpec = { _id: -1 };
+    if (sort === 'rating') sortSpec = { avg_rating: -1, _id: -1 };
+    if (sort === 'title')  sortSpec = { title: 1 };
+
+    const books = await Book.find(filter).sort(sortSpec);
+
+    // Populate datalist suggestions for the filter bar
+    const distinctCourses     = (await Book.distinct('course')).filter(Boolean);
+    const distinctDepartments = (await Book.distinct('department')).filter(Boolean);
+
+    res.render("books/index", {
+        books, searchResults, query: query || "", personalRecommendations,
+        filters: { genre, author, department, course, year, min_rating, available, sort },
+        distinctCourses, distinctDepartments
+    });
 }));
 
 app.get("/register", (req, res) => {
@@ -277,9 +302,13 @@ app.get("/logout", isLoggedIn, function (req, res, next) {
   });
 });
 
-app.get("/books/new", isLoggedIn, (req, res) => {
-  res.render("books/new");
-});
+app.get("/books/new", isLoggedIn, catchAsync(async (req, res) => {
+  // Pull existing course/department values so the upload form's
+  // <datalist> can suggest them while the user types.
+  const distinctCourses     = (await Book.distinct('course')).filter(Boolean);
+  const distinctDepartments = (await Book.distinct('department')).filter(Boolean);
+  res.render("books/new", { distinctCourses, distinctDepartments });
+}));
 
 app.get(
   "/books/:id",
@@ -463,6 +492,24 @@ app.post(
   })
 );
 
+// Helper — recompute avg_rating from all reviews on a book.
+// Called after any review is posted or deleted so the denormalised
+// avg_rating on the Book document stays in sync.
+// Why denormalise: rating filter on /books needs O(1) MongoDB query,
+// not an aggregation join across thousands of reviews per request.
+async function recomputeAvgRating(bookId) {
+  const book = await Book.findById(bookId).populate('reviews');
+  if (!book) return;
+  const reviews = book.reviews || [];
+  if (reviews.length === 0) {
+    book.avg_rating = 0;
+  } else {
+    const sum = reviews.reduce((acc, r) => acc + (r.rating || 0), 0);
+    book.avg_rating = sum / reviews.length;
+  }
+  await book.save();
+}
+
 app.post(
   "/books/:id/reviews",
   isLoggedIn,
@@ -474,6 +521,7 @@ app.post(
     book.reviews.push(review);
     await review.save();
     await book.save();
+    await recomputeAvgRating(book._id);   // keep denormalised avg in sync
     req.flash("success", "Created new review!");
     res.redirect(`/books/${book._id}`);
   })
@@ -487,6 +535,7 @@ app.delete(
     const { id, reviewId } = req.params;
     await Book.findByIdAndUpdate(id, { $pull: { reviews: reviewId } });
     await Review.findByIdAndDelete(reviewId);
+    await recomputeAvgRating(id);         // keep denormalised avg in sync
     req.flash("success", "Review deleted!");
     res.redirect(`/books/${id}`);
   })
@@ -717,10 +766,12 @@ app.get("/pdfs", catchAsync(async (req, res) => {
   res.render("pdfs/index", { pdfs, query: req.query });
 }));
 
-// GET /pdfs/new — upload form
-app.get("/pdfs/new", isLoggedIn, (req, res) => {
-  res.render("pdfs/new");
-});
+// GET /pdfs/new — upload form with autofill suggestions
+app.get("/pdfs/new", isLoggedIn, catchAsync(async (req, res) => {
+  const distinctCourses     = (await Pdf.distinct('course')).filter(Boolean);
+  const distinctDepartments = (await Pdf.distinct('department')).filter(Boolean);
+  res.render("pdfs/new", { distinctCourses, distinctDepartments });
+}));
 
 // POST /pdfs — upload a new PDF
 app.post("/pdfs", isLoggedIn, uploadPdf.single("pdf"), catchAsync(async (req, res) => {
