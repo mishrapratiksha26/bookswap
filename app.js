@@ -36,6 +36,32 @@ const upload = multer({ storage });
 const Review = require("./models/review");
 const Pdf = require("./models/pdf");
 const Course = require("./models/course");
+
+// Canonical 17 IIT (ISM) Dhanbad departments.
+// Hardcoded (rather than Course.distinct('department')) because:
+//   (a) the list is fixed for the institute, refreshed only on NEP updates
+//   (b) saves a DB roundtrip on every upload page render
+//   (c) guarantees a stable display order regardless of DB seed order
+// Source: bookswap-ai/scripts/fetch_iitism_courses.py
+const IITISM_DEPARTMENTS = [
+  { code: "AGL",  name: "Applied Geology" },
+  { code: "AGP",  name: "Applied Geophysics" },
+  { code: "CHE",  name: "Chemical Engineering" },
+  { code: "CCB",  name: "Chemistry and Chemical Biology" },
+  { code: "CVE",  name: "Civil Engineering" },
+  { code: "CSE",  name: "Computer Science and Engineering" },
+  { code: "EE",   name: "Electrical Engineering" },
+  { code: "ECE",  name: "Electronics Engineering" },
+  { code: "ESE",  name: "Environmental Science & Engineering" },
+  { code: "FMME", name: "Fuel Mineral & Metallurgical Engineering" },
+  { code: "HSS",  name: "Humanities and Social Sciences" },
+  { code: "MSIE", name: "Management Studies and Industrial Engineering" },
+  { code: "MC",   name: "Mathematics and Computing" },
+  { code: "MECH", name: "Mechanical Engineering" },
+  { code: "ME",   name: "Mining Engineering" },
+  { code: "PE",   name: "Petroleum Engineering" },
+  { code: "PHY",  name: "Physics" }
+];
 const Wishlist = require("./models/wishlist");
 const axios = require("axios");
 const FormData = require("form-data");
@@ -1095,21 +1121,32 @@ app.get("/pdfs", catchAsync(async (req, res) => {
   res.render("pdfs/index", { pdfs, query: req.query });
 }));
 
-// GET /pdfs/new — upload form with autofill suggestions
-app.get("/pdfs/new", isLoggedIn, catchAsync(async (req, res) => {
-  const distinctCourses     = (await Pdf.distinct('course')).filter(Boolean);
-  const distinctDepartments = (await Pdf.distinct('department')).filter(Boolean);
-  res.render("pdfs/new", { distinctCourses, distinctDepartments });
-}));
+// GET /pdfs/new — upload form.
+// The old distinct('course')/distinct('department') autofill has been replaced
+// by the canonical IIT ISM catalogue: hardcoded 17-department list + the
+// /api/courses?dept=<code> endpoint populates the course dropdown client-side.
+app.get("/pdfs/new", isLoggedIn, (req, res) => {
+  res.render("pdfs/new", { departments: IITISM_DEPARTMENTS });
+});
 
 // POST /pdfs — upload a new PDF
 app.post("/pdfs", isLoggedIn, uploadPdf.single("pdf"), catchAsync(async (req, res) => {
-  const { title, subject, course, department, professor, resource_type, description } = req.body;
+  const {
+    title, subject, course, department, professor, resource_type, description,
+    // Resource-type-specific extras. Form submits empty strings for fields
+    // not relevant to the chosen type; Mongoose coerces "" to default below.
+    semester, topic, exam_type, year
+  } = req.body;
 
   if (!req.file) {
     req.flash("error", "Please select a PDF file to upload.");
     return res.redirect("/pdfs/new");
   }
+
+  // Coerce numeric fields safely — empty strings would otherwise fail the
+  // Number cast and throw a Mongoose validation error.
+  const semesterNum = semester && !isNaN(parseInt(semester, 10)) ? parseInt(semester, 10) : null;
+  const yearNum     = year     && !isNaN(parseInt(year, 10))     ? parseInt(year, 10)     : null;
 
   const pdf = new Pdf({
     title,
@@ -1118,6 +1155,10 @@ app.post("/pdfs", isLoggedIn, uploadPdf.single("pdf"), catchAsync(async (req, re
     department,
     professor,
     resource_type: resource_type || "notes",
+    semester:  semesterNum,
+    topic:     topic || "",
+    exam_type: exam_type || "",
+    year:      yearNum,
     description,
     cloudinary_url: req.file.path,
     cloudinary_public_id: req.file.filename,

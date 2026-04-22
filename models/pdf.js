@@ -43,6 +43,38 @@ const pdfSchema = new mongoose.Schema({
         enum: ["textbook", "notes", "previous_papers", "reference"],
         default: "notes"
     },
+    // Optional, resource-type-specific metadata. The upload form reveals the
+    // relevant fields based on resource_type; blanks are fine for resources
+    // where they don't apply (e.g. reference textbooks have no exam_type).
+
+    // For resource_type="notes": which semester the notes are from + what
+    // specific topic they cover. `topic` is free-text so a student can write
+    // e.g. "Process scheduling + deadlocks" even if the whole course OS is
+    // already tagged via `course`.
+    semester: {
+        type: Number,           // 1..10 (IntMT has up to 10)
+        min: 1,
+        max: 10,
+        default: null
+    },
+    topic: {
+        type: String,
+        trim: true,
+        default: ""
+    },
+
+    // For resource_type="previous_papers": which exam + which year.
+    exam_type: {
+        type: String,
+        enum: ["mid_sem", "end_sem", "quiz", "assignment", ""],
+        default: ""
+    },
+    year: {
+        type: Number,           // e.g. 2024
+        min: 2000,
+        max: 2100,
+        default: null
+    },
     description: {
         type: String,
         default: ""
