@@ -35,6 +35,7 @@ const { storage } = require("./cloudinary/index");
 const upload = multer({ storage });
 const Review = require("./models/review");
 const Pdf = require("./models/pdf");
+const Course = require("./models/course");
 const Wishlist = require("./models/wishlist");
 const axios = require("axios");
 const FormData = require("form-data");
@@ -809,6 +810,57 @@ app.get("/api/book-metadata", catchAsync(async (req, res) => {
         console.log("Google Books proxy failed:", err.message);
         return res.status(502).json({ error: "metadata service unavailable" });
     }
+}));
+
+// ---------------------------------------------------------------------------
+// GET /api/courses?dept=<department_code>
+//
+// Returns the canonical course list for one department, feeding the cascading
+// course dropdown on PDF/book upload forms.
+//
+// Contract:
+//   - `dept` is REQUIRED (400 otherwise). With 1,570 courses in the catalogue,
+//     a single flat dropdown is unusable; the UI must pick a department first.
+//   - Returns [{ code, name, type }] sorted by code.
+//       type ∈ { "Theory", "Practical", "Modular", "Audit", "Thesis", "Project" }
+//       The catalogue prints course_type for ~96% of rows; the 68 theses /
+//       projects come through with a blank course_type and an LTP like
+//       "0-0-0 (36)" — we infer the label from the course name so the user
+//       sees something meaningful in the dropdown.
+//   - No auth — this is public reference data, low risk.
+// ---------------------------------------------------------------------------
+app.get("/api/courses", catchAsync(async (req, res) => {
+    const dept = (req.query.dept || "").trim().toUpperCase();
+    if (!dept) {
+        return res.status(400).json({
+            error: "dept query parameter required (e.g. /api/courses?dept=MC)"
+        });
+    }
+
+    const docs = await Course.find({ department_code: dept })
+                             .sort({ code: 1 })
+                             .lean();
+
+    const courses = docs.map(c => {
+        let type = (c.course_type || "").trim();
+        if (!type) {
+            // Blank course_type — catalogue printed an untyped row. Infer a
+            // readable label from the name (catches ~68 thesis/project rows
+            // with non-standard LTP strings like "0-0-0 (36)").
+            const nameLc = (c.name || "").toLowerCase();
+            if (nameLc.includes("thesis")) type = "Thesis";
+            else if (nameLc.includes("project")) type = "Project";
+            else if (nameLc.includes("seminar")) type = "Seminar";
+            else type = "—";
+        }
+        return { code: c.code, name: c.name, type };
+    });
+
+    res.json({
+        department_code: dept,
+        count: courses.length,
+        courses
+    });
 }));
 
 app.post('/chat/:userId/delete', async (req, res) => {
