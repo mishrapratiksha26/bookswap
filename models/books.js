@@ -51,9 +51,38 @@ const BookSchema = new Schema({
    // Enables filtering by course / department / year on the index page
    // and powers the curriculum matcher's book-search by department.
    // ---------------------------------------------------------------
-   course:           { type: String },   // e.g. "MCO502"
-   department:       { type: String },   // e.g. "Mathematics and Computing"
-   publication_year: { type: Number },   // e.g. 2017
+   course:           { type: String },   // e.g. "MCO502 - Optimization Techniques"
+   department:       { type: String },   // e.g. "MC" (IIT ISM department code)
+   publication_year: { type: Number },   // textbook copyright year, e.g. 2017
+
+   // ---------------------------------------------------------------
+   // Physical study material beyond textbooks — a student may lend
+   // out hand-written notes, printed lecture slides, or hard copies
+   // of previous year question papers. Mirrors the Pdf schema so the
+   // curriculum matcher and upload forms treat physical vs digital
+   // resources uniformly.
+   //
+   // resource_type defaults to "textbook" (the common case for the
+   // books collection); notes/previous_papers/reference are opt-in
+   // when a student lists loose academic material.
+   // ---------------------------------------------------------------
+   resource_type: {
+      type: String,
+      enum: ["textbook", "notes", "previous_papers", "reference"],
+      default: "textbook"
+   },
+   // For resource_type="notes":
+   semester: { type: Number, min: 1, max: 10, default: null },
+   topic:    { type: String, trim: true, default: "" },
+   // For resource_type="previous_papers": which exam, which year.
+   // `year` is the EXAM year (2024 mid-sem), distinct from publication_year
+   // (a textbook's copyright year). Both can be populated if ever relevant.
+   exam_type: {
+      type: String,
+      enum: ["mid_sem", "end_sem", "quiz", "assignment", ""],
+      default: ""
+   },
+   year: { type: Number, min: 2000, max: 2100, default: null },
 
    // ---------------------------------------------------------------
    // avg_rating: denormalised average of all reviews on this book.

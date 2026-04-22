@@ -409,13 +409,13 @@ app.get("/logout", isLoggedIn, function (req, res, next) {
   });
 });
 
-app.get("/books/new", isLoggedIn, catchAsync(async (req, res) => {
-  // Pull existing course/department values so the upload form's
-  // <datalist> can suggest them while the user types.
-  const distinctCourses     = (await Book.distinct('course')).filter(Boolean);
-  const distinctDepartments = (await Book.distinct('department')).filter(Boolean);
-  res.render("books/new", { distinctCourses, distinctDepartments });
-}));
+app.get("/books/new", isLoggedIn, (req, res) => {
+  // Course/department values now come from the canonical IIT ISM catalogue:
+  // departments hardcoded server-side (17 entries, no DB roundtrip needed),
+  // courses fetched client-side from /api/courses?dept=<code> when the user
+  // picks a department.
+  res.render("books/new", { departments: IITISM_DEPARTMENTS });
+});
 
 app.get(
   "/books/:id",

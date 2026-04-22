@@ -137,37 +137,79 @@
                 </select>
             </div>
 
-            <!-- Conditional academic fields — only for EDUCATIONAL genre -->
+            <!-- Conditional academic fields — only for EDUCATIONAL genre.
+                 Mirrors the PDF upload form: dept → course cascade backed by
+                 the canonical NEP catalogue (GET /api/courses?dept=<code>),
+                 plus a resource_type dropdown that reveals notes or PYQ
+                 metadata so a student can lend out hand-written notes or
+                 hard-copy previous year papers, not just textbooks. -->
             <div id="educational-fields" style="display: none;">
                 <div class="alert alert-info py-2 small">
-                    📚 Academic book — help fellow students find it by course &amp; department.
+                    📚 Academic material — help fellow students find it by course &amp; department.
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col">
+                        <label class="form-label" for="department">Department:</label>
+                        <select class="form-select" id="department" name="book[department]">
+                            <option value="" selected>Pick a department...</option>
+                            <% departments.forEach(d => { %>
+                                <option value="<%= d.code %>"><%= d.code %> — <%= d.name %></option>
+                            <% }) %>
+                        </select>
+                    </div>
+                    <div class="col">
+                        <label class="form-label" for="course">Course:</label>
+                        <select class="form-select" id="course" name="book[course]" disabled>
+                            <option value="" selected>Pick a department first...</option>
+                        </select>
+                        <div class="form-text" id="course-help">Optional — leave blank for generic material.</div>
+                    </div>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label" for="course">Course Code:</label>
-                    <input class="form-control" type="text" id="course" name="book[course]"
-                           list="course-list" placeholder="e.g. MCO502">
-                    <datalist id="course-list">
-                        <% if (typeof distinctCourses !== 'undefined') { %>
-                            <% distinctCourses.forEach(c => { %>
-                                <option value="<%= c %>"></option>
-                            <% }) %>
-                        <% } %>
-                    </datalist>
-                    <div class="form-text">Suggestions come from existing books</div>
+                    <label class="form-label" for="resource_type">Type of material:</label>
+                    <select class="form-select" id="resource_type" name="book[resource_type]">
+                        <option value="textbook" selected>Textbook</option>
+                        <option value="notes">Peer Notes (hand-written / printed)</option>
+                        <option value="previous_papers">Previous Year Papers (hard copy)</option>
+                        <option value="reference">Reference Material</option>
+                    </select>
                 </div>
 
-                <div class="mb-3">
-                    <label class="form-label" for="department">Department:</label>
-                    <input class="form-control" type="text" id="department" name="book[department]"
-                           list="dept-list" placeholder="e.g. Mathematics and Computing">
-                    <datalist id="dept-list">
-                        <% if (typeof distinctDepartments !== 'undefined') { %>
-                            <% distinctDepartments.forEach(d => { %>
-                                <option value="<%= d %>"></option>
-                            <% }) %>
-                        <% } %>
-                    </datalist>
+                <!-- Notes-specific extras (shown when resource_type=notes) -->
+                <div id="notes-extras" class="row mb-3" style="display: none;">
+                    <div class="col">
+                        <label class="form-label">Semester</label>
+                        <select class="form-select" name="book[semester]">
+                            <option value="">—</option>
+                            <% for (let s = 1; s <= 10; s++) { %>
+                                <option value="<%= s %>"><%= s %></option>
+                            <% } %>
+                        </select>
+                    </div>
+                    <div class="col">
+                        <label class="form-label">Topic covered</label>
+                        <input type="text" class="form-control" name="book[topic]" placeholder="e.g. Process scheduling, deadlocks">
+                    </div>
+                </div>
+
+                <!-- PYQ-specific extras (shown when resource_type=previous_papers) -->
+                <div id="pyq-extras" class="row mb-3" style="display: none;">
+                    <div class="col">
+                        <label class="form-label">Exam type</label>
+                        <select class="form-select" name="book[exam_type]">
+                            <option value="">—</option>
+                            <option value="mid_sem">Mid-sem</option>
+                            <option value="end_sem">End-sem</option>
+                            <option value="quiz">Quiz / Class test</option>
+                            <option value="assignment">Assignment</option>
+                        </select>
+                    </div>
+                    <div class="col">
+                        <label class="form-label">Exam Year</label>
+                        <input type="number" class="form-control" name="book[year]" min="2000" max="2099" placeholder="e.g. 2024">
+                    </div>
                 </div>
             </div>
 
@@ -215,6 +257,69 @@
         const block = document.getElementById('educational-fields');
         block.style.display = (genre === 'EDUCATIONAL') ? 'block' : 'none';
     }
+
+    // ─── Department → Course cascade ────────────────────────────────────
+    // Mirrors the PDF upload form. When the user picks a department, fetch
+    // that department's course list from /api/courses?dept=<code> and
+    // populate the course <select>. In-memory cache so re-picking a dept
+    // is free. Option value is "CODE - Name" so the Python-side matcher
+    // can substring-match on either code or name.
+    (function () {
+        const deptSelect   = document.getElementById('department');
+        const courseSelect = document.getElementById('course');
+        const courseHelp   = document.getElementById('course-help');
+        if (!deptSelect || !courseSelect) return;
+        const cache = {};
+
+        async function loadCourses(deptCode) {
+            courseSelect.disabled = true;
+            courseSelect.innerHTML = '<option value="">Loading...</option>';
+            let courses = cache[deptCode];
+            if (!courses) {
+                try {
+                    const resp = await fetch(`/api/courses?dept=${encodeURIComponent(deptCode)}`);
+                    if (!resp.ok) throw new Error('fetch failed');
+                    const data = await resp.json();
+                    courses = data.courses || [];
+                    cache[deptCode] = courses;
+                } catch (e) {
+                    courseSelect.innerHTML = '<option value="">Could not load courses</option>';
+                    if (courseHelp) courseHelp.textContent = 'Failed to load courses.';
+                    courseSelect.disabled = false;
+                    return;
+                }
+            }
+            courseSelect.innerHTML = '<option value="">— No specific course —</option>' +
+                courses.map(c => {
+                    const label = `${c.code} — ${c.name}` + (c.type && c.type !== '—' ? ` (${c.type})` : '');
+                    const value = `${c.code} - ${c.name}`;
+                    return `<option value="${value}">${label}</option>`;
+                }).join('');
+            courseSelect.disabled = false;
+            if (courseHelp) courseHelp.textContent = `${courses.length} courses in this department. Optional.`;
+        }
+
+        deptSelect.addEventListener('change', e => {
+            if (e.target.value) loadCourses(e.target.value);
+        });
+    })();
+
+    // ─── Resource-type → conditional extras ─────────────────────────────
+    // "notes" → show semester + topic fields; "previous_papers" → show
+    // exam type + year; textbook/reference show nothing extra.
+    (function () {
+        const rtSelect    = document.getElementById('resource_type');
+        const notesExtras = document.getElementById('notes-extras');
+        const pyqExtras   = document.getElementById('pyq-extras');
+        if (!rtSelect) return;
+        function syncExtras() {
+            const v = rtSelect.value;
+            notesExtras.style.display = (v === 'notes') ? '' : 'none';
+            pyqExtras.style.display   = (v === 'previous_papers') ? '' : 'none';
+        }
+        rtSelect.addEventListener('change', syncExtras);
+        syncExtras();
+    })();
 
     // ─── Google Books autofill ──────────────────────────────────────────
     // Hits our /api/book-metadata proxy, shows up to 5 candidates; user

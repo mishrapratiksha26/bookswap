@@ -9,7 +9,17 @@ module.exports.bookSchema =Joi.object({
         // Optional academic metadata — only filled for genre = EDUCATIONAL
         course:Joi.string().allow('').optional(),
         department:Joi.string().allow('').optional(),
-        publication_year:Joi.number().integer().min(1800).max(2100).optional().allow('')
+        publication_year:Joi.number().integer().min(1800).max(2100).optional().allow(''),
+        // Physical study material beyond textbooks (hand-written notes,
+        // printed lecture slides, hard-copy PYQs). Mirrors the Pdf schema
+        // so the curriculum matcher treats digital and physical uniformly.
+        resource_type:Joi.string().valid('textbook','notes','previous_papers','reference').optional(),
+        // For resource_type = notes
+        semester:Joi.number().integer().min(1).max(10).optional().allow('', null),
+        topic:Joi.string().allow('').optional(),
+        // For resource_type = previous_papers
+        exam_type:Joi.string().valid('mid_sem','end_sem','quiz','assignment','').optional(),
+        year:Joi.number().integer().min(2000).max(2100).optional().allow('', null)
     }).required(),
     deleteImages:Joi.array()
 })
