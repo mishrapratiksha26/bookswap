@@ -4,7 +4,7 @@ if (process.env.NODE_ENV !== "production") {
 const mongoose = require("mongoose");
 const path = require("path");
 const Joi = require("joi");
-const BorrowRequest = require("./models/borrowrequest");
+const BorrowRequest = require("./models/borrowRequest");
 const { bookSchema, reviewSchema } = require("./schemas");
 const express = require("express");
 const { cloudinary } = require("./cloudinary");

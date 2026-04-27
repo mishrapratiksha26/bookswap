@@ -87,6 +87,15 @@ const pdfSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    // Optional cover image URL (autofilled from Google Books on upload).
+    // Never user-uploaded — we deliberately don't take files here to keep
+    // the PDF form light. When a candidate from Google Books is picked, the
+    // thumbnail URL is stored here and rendered on the PDF card / show page.
+    // Blank string = no cover; render a generic PDF icon instead.
+    cover_url: {
+        type: String,
+        default: ""
+    },
     // Uploaded by which user
     uploadedBy: {
         type: mongoose.Schema.Types.ObjectId,
