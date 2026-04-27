@@ -47,9 +47,16 @@
         <p class="empty-msg">No pending borrow requests.</p>
       <% } else { %>
         <% borrowRequests.forEach(request => { %>
+          <%
+            // Same null-guard as the My Borrow Requests block below — a
+            // borrow document can outlive the book or borrower it points
+            // to. Render a graceful placeholder rather than crash.
+            const incBookTitle = (request.book && request.book.title) || '(book no longer available)';
+            const incBorrower  = (request.borrower && request.borrower.username) || '(deleted user)';
+          %>
           <div class="request-card">
             <div>
-              <strong><%= request.borrower.username %></strong> wants to borrow <strong><%= request.book.title %></strong>
+              <strong><%= incBorrower %></strong> wants to borrow <strong><%= incBookTitle %></strong>
               <% if (request.returnDate) { %><br><small class="text-muted">Return by: <%= new Date(request.returnDate).toLocaleDateString() %></small><% } %>
             </div>
             <div style="display:flex; gap:0.5rem;">
@@ -74,15 +81,25 @@
         <p class="empty-msg">You haven't sent any borrow requests yet.</p>
       <% } else { %>
         <% myBorrowRequests.forEach(request => { %>
+          <%
+            // Defensive nulls: a borrow request's `book` or `owner` can be
+            // null if the referenced document was deleted but the request
+            // wasn't (Mongoose's populate returns null on dangling refs
+            // rather than throwing). Render a graceful "deleted" state
+            // instead of crashing the whole profile page.
+            const bookTitle  = (request.book && request.book.title)  || '(book no longer available)';
+            const ownerName  = (request.owner && request.owner.username) || '(deleted user)';
+            const ownerLink  = request.owner && request.owner._id;
+          %>
           <div class="request-card <%= request.status %>">
             <div>
-              <strong><%= request.book.title %></strong> — owned by <strong><%= request.owner.username %></strong>
+              <strong><%= bookTitle %></strong> — owned by <strong><%= ownerName %></strong>
               <% if (request.returnDate) { %><br><small class="text-muted">Return by: <%= new Date(request.returnDate).toLocaleDateString() %></small><% } %>
             </div>
             <div style="display:flex; align-items:center; gap:0.8rem;">
               <span class="status-badge badge-<%= request.status %>"><%= request.status.toUpperCase() %></span>
-              <% if (request.status === 'approved') { %>
-                <a href="/chat/<%= request.owner._id %>" class="btn btn-sm btn-success">💬 Chat to arrange pickup</a>
+              <% if (request.status === 'approved' && ownerLink) { %>
+                <a href="/chat/<%= ownerLink %>" class="btn btn-sm btn-success">💬 Chat to arrange pickup</a>
               <% } %>
             </div>
           </div>

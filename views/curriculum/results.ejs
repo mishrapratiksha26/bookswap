@@ -24,6 +24,32 @@
     <a href="/curriculum" class="btn btn-outline-secondary">Upload Another</a>
   </div>
 
+  <!-- ================================================================ -->
+  <!-- Saved-snapshot banner                                             -->
+  <!--                                                                   -->
+  <!-- Shown when this page is rendering a saved curriculum (passed as   -->
+  <!-- `savedCurriculum` by the GET /curriculum/:id route OR by the      -->
+  <!-- POST /curriculum upload route after a successful save). Tells     -->
+  <!-- the user this is a historical snapshot, not a fresh match, and    -->
+  <!-- gives them a one-click delete to remove it from their profile.    -->
+  <!-- ================================================================ -->
+  <% if (typeof savedCurriculum !== 'undefined' && savedCurriculum) { %>
+    <div class="alert alert-info d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <strong>📌 Saved to your profile</strong>
+        <span class="text-muted small ms-2">
+          on <%= new Date(savedCurriculum.created_at).toLocaleString() %>
+          — this is a snapshot. Re-upload the PDF for a fresh match.
+        </span>
+      </div>
+      <form action="/curriculum/<%= savedCurriculum._id %>?_method=DELETE" method="POST" class="d-inline m-0"
+            onsubmit="return confirm('Remove this saved curriculum from your profile?')">
+        <button type="submit" class="btn btn-sm btn-outline-danger">Remove from profile</button>
+      </form>
+    </div>
+  <% } %>
+
+
   <!-- Error -->
   <% if (matchData.error) { %>
     <div class="alert alert-danger">
@@ -132,19 +158,34 @@
             </div>
 
             <!-- Book title + source badge -->
+            <%
+              // no_match = the unit-fallback path's LLM judge rejected the
+              // cosine-argmax pick because no inventory book is genuinely
+              // an alternative for this unit (e.g. OOP plan with only OS
+              // textbooks in the library). Render an honest empty state
+              // instead of a misleading wrong-domain suggestion.
+              const isNoMatch = unit.source === 'no_match' || !unit.book_title;
+            %>
             <div class="mb-2">
-              <strong>📘 <%= unit.book_title %></strong>
-              <% if (unit.book_author) { %>
-                <span class="text-muted">— <%= unit.book_author %></span>
-              <% } %>
-
-              <% if (unit.source === 'professor_recommended') { %>
-                <span class="badge bg-success ms-2">🎓 Professor-recommended</span>
-              <% } else { %>
-                <span class="badge bg-info text-dark ms-2">🤖 AI-suggested</span>
+              <% if (isNoMatch) { %>
+                <strong class="text-muted">📭 No matching book in our inventory</strong>
+                <span class="badge bg-secondary ms-2">Inventory gap</span>
                 <small class="text-muted d-block mt-1">
-                  Professor's recommended book was not available — this is the closest alternative in our library.
+                  <%= unit.no_match_reason || "We couldn't find a book in our library that genuinely covers this unit. Try uploading the professor's textbook, or browse the digital PDF library for related notes." %>
                 </small>
+              <% } else { %>
+                <strong>📘 <%= unit.book_title %></strong>
+                <% if (unit.book_author) { %>
+                  <span class="text-muted">— <%= unit.book_author %></span>
+                <% } %>
+                <% if (unit.source === 'professor_recommended') { %>
+                  <span class="badge bg-success ms-2">🎓 Professor-recommended</span>
+                <% } else { %>
+                  <span class="badge bg-info text-dark ms-2">🤖 AI-suggested</span>
+                  <small class="text-muted d-block mt-1">
+                    Professor's recommended book was not available — this is the closest alternative in our library.
+                  </small>
+                <% } %>
               <% } %>
             </div>
 
@@ -210,11 +251,21 @@
                       <% } %>
                     </a>
                   <% } else if (fmt.type === 'pdf') { %>
+                    <%
+                      // "Page-accurate" = this unit's chapter match actually
+                      // came from the PDF's embedded TOC (chapter_source=='pdf')
+                      // AND we have a real page number. We deliberately don't
+                      // trust `fmt.page_accurate` alone — it's true whenever
+                      // ANY PDF format exists, which mislabels AI-guessed
+                      // chapters on PDF-backed units.
+                      const unitIsPageAccurate =
+                        unit.chapter_source === 'pdf' && unit.chapter_page;
+                    %>
                     <a href="/pdfs/<%= fmt.pdf_id %>"
                        class="btn btn-sm btn-outline-primary me-2 mb-1">
                       📄 Open PDF
-                      <% if (fmt.page_accurate) { %>
-                        <span class="badge bg-primary ms-1">Page-accurate</span>
+                      <% if (unitIsPageAccurate) { %>
+                        <span class="badge bg-primary ms-1">p. <%= unit.chapter_page %></span>
                       <% } %>
                     </a>
                   <% } %>
@@ -267,9 +318,9 @@
     <div class="mb-5">
       <h4 class="mb-3">🗂️ Course Material in Our Library</h4>
       <p class="text-muted small mb-3">
-        PDFs uploaded by students for this course
-        <% if (matchData.course_code) { %>(<%= matchData.course_code %>)<% } %>
-        or department<% if (matchData.department) { %> (<%= matchData.department %>)<% } %>.
+        Peer-uploaded PDFs and physical listings for this course
+        <% if (matchData.course_code) { %>(<%= matchData.course_code %>)<% } %>.
+        Physical items marked 📗 can be borrowed; digital PDFs 📄 are free to download.
       </p>
 
       <% Object.keys(_groups).forEach(rt => { %>
@@ -279,9 +330,15 @@
             <div class="col-md-6">
               <div class="card h-100 shadow-sm">
                 <div class="card-body">
-                  <h6 class="mb-1"><%= note.title %></h6>
+                  <h6 class="mb-1">
+                    <% if (note.source_type === 'physical') { %>📗<% } else { %>📄<% } %>
+                    <%= note.title %>
+                  </h6>
                   <% if (note.subject) { %>
                     <p class="text-muted small mb-1"><%= note.subject %></p>
+                  <% } %>
+                  <% if (note.source_type === 'physical' && note.author) { %>
+                    <p class="text-muted small mb-1">by <%= note.author %></p>
                   <% } %>
                   <p class="small mb-2">
                     <% if (note.course) { %>
@@ -293,19 +350,32 @@
                     <% if (note.professor) { %>
                       <span class="text-muted">by <%= note.professor %></span>
                     <% } %>
+                    <% if (note.source_type === 'physical') { %>
+                      <% if (note.available) { %>
+                        <span class="badge bg-success">Available</span>
+                      <% } else { %>
+                        <span class="badge bg-secondary">Currently borrowed</span>
+                      <% } %>
+                    <% } %>
                   </p>
                   <p class="text-muted small mb-2">
-                    <em>Matched by:</em> <%= note.match_reason.replace('_', ' ') %>
+                    <em>Matched by:</em> <%= note.match_reason.replace(/_/g, ' ') %>
                   </p>
-                  <% if (note.cloudinary_url) { %>
-                    <a href="<%= note.cloudinary_url %>" target="_blank" class="btn btn-sm btn-outline-primary">
-                      Open PDF
+                  <% if (note.source_type === 'physical') { %>
+                    <a href="/books/<%= note.book_id %>" class="btn btn-sm btn-outline-primary">
+                      View listing
                     </a>
-                  <% } %>
-                  <% if (note.pdf_id) { %>
-                    <a href="/pdfs/<%= note.pdf_id %>" class="btn btn-sm btn-outline-secondary">
-                      Details
-                    </a>
+                  <% } else { %>
+                    <% if (note.cloudinary_url) { %>
+                      <a href="<%= note.cloudinary_url %>" target="_blank" class="btn btn-sm btn-outline-primary">
+                        Open PDF
+                      </a>
+                    <% } %>
+                    <% if (note.pdf_id) { %>
+                      <a href="/pdfs/<%= note.pdf_id %>" class="btn btn-sm btn-outline-secondary">
+                        Details
+                      </a>
+                    <% } %>
                   <% } %>
                 </div>
               </div>

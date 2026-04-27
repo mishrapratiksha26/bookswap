@@ -205,7 +205,94 @@
 </div>
 
 <script>
-  const AGENT_URL = 'http://localhost:8000/agent';
+  // Origin-relative — hits the Node proxy at POST /api/ai-chat which
+  // forwards to the Python FastAPI service with user_id read from the
+  // server-side Passport session. Works identically on localhost and on
+  // Render without environment-specific code.
+  const AGENT_URL = '/api/ai-chat';
+
+  // -----------------------------------------------------------------
+  // Persistence keys (localStorage so the conversation survives across
+  // tab close / reopen — sessionStorage clears on tab close, which is
+  // exactly the bug the tester reported: "i close the chat then i
+  // reopen again the old msg is gone").
+  //
+  // The server (`/agent` on FastAPI) keeps its own conversation log
+  // in MongoDB keyed by `session_id`, with a TTL of 30 min. As long as
+  // the user reopens within that window AND we send the same session_id,
+  // the agent has full multi-turn context. If they return after >30 min,
+  // server-side memory is gone but the visible UI history (this localStorage
+  // copy) still loads, so the user at least sees what they previously
+  // discussed even if the agent has forgotten.
+  // -----------------------------------------------------------------
+  const SESSION_KEY = 'bookswap_chat_session';
+  const HISTORY_KEY = 'bookswap_chat_history';
+
+  function getSessionId() {
+    let sid = localStorage.getItem(SESSION_KEY);
+    if (!sid) {
+      // crypto.randomUUID is available in modern browsers; fall back to
+      // a timestamp+random combination for older ones.
+      sid = (window.crypto && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : 'sid-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
+      localStorage.setItem(SESSION_KEY, sid);
+    }
+    return sid;
+  }
+
+  function loadHistory() {
+    try {
+      return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveHistory(history) {
+    try {
+      // Cap at last 40 entries — protects localStorage from unbounded
+      // growth and matches roughly the 10-turn server-side context window
+      // (each turn = user msg + bot msg = 2 entries, with some headroom).
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(-40)));
+    } catch (e) { /* quota exceeded — silently drop */ }
+  }
+
+  function appendToHistory(role, text) {
+    const h = loadHistory();
+    h.push({ role, text, ts: Date.now() });
+    saveHistory(h);
+  }
+
+  function clearChatHistory() {
+    localStorage.removeItem(HISTORY_KEY);
+    localStorage.removeItem(SESSION_KEY);
+    const messages = document.getElementById('chat-messages');
+    messages.innerHTML = '<div class="chat-welcome">Hi! I can help you find books, check availability, and create learning roadmaps. Ask me anything!</div>';
+  }
+
+  // On page load, render any saved history. Runs once when the partial's
+  // <script> evaluates, so the panel shows past messages immediately on
+  // first toggle-open without waiting for a user action.
+  (function rehydrate() {
+    const h = loadHistory();
+    if (h.length === 0) return;
+    const messages = document.getElementById('chat-messages');
+    if (!messages) return;
+    const welcome = messages.querySelector('.chat-welcome');
+    if (welcome) welcome.remove();
+    h.forEach(entry => {
+      const el = document.createElement('div');
+      el.className = 'chat-msg ' + (entry.role === 'user' ? 'user' : 'bot');
+      if (entry.role === 'user') {
+        el.textContent = entry.text;
+      } else {
+        el.innerHTML = formatResponse(entry.text);
+      }
+      messages.appendChild(el);
+    });
+    messages.scrollTop = messages.scrollHeight;
+  })();
 
   function toggleChat() {
     document.getElementById('chat-popup').classList.toggle('open');
@@ -236,6 +323,7 @@
     userMsg.className = 'chat-msg user';
     userMsg.textContent = text;
     messages.appendChild(userMsg);
+    appendToHistory('user', text);
 
     input.value = '';
     input.disabled = true;
@@ -252,7 +340,13 @@
       const res = await fetch(AGENT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text })
+        // session_id sends the same UUID on every request from this
+        // browser. The Python /agent route looks it up in the
+        // `conversations` collection (TTL 30 min), loads prior turns,
+        // and feeds them as messages to Groq — that's what gives the
+        // agent multi-turn context. Without this field every request
+        // is a fresh conversation and the bot "forgets" instantly.
+        body: JSON.stringify({ message: text, session_id: getSessionId() })
       });
       const data = await res.json();
 
@@ -262,6 +356,7 @@
       botMsg.className = 'chat-msg bot';
       botMsg.innerHTML = formatResponse(data.response);
       messages.appendChild(botMsg);
+      appendToHistory('bot', data.response || '');
     } catch (err) {
       thinking.remove();
       const errMsg = document.createElement('div');

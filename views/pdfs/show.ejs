@@ -11,11 +11,26 @@
 
   <div class="card shadow-sm">
     <div class="card-body">
-      <!-- Type + Title -->
-      <span class="badge bg-<%= pdf.resource_type === 'textbook' ? 'primary' : pdf.resource_type === 'notes' ? 'success' : pdf.resource_type === 'previous_papers' ? 'warning text-dark' : 'secondary' %> mb-2">
-        <%= pdf.resource_type.replace('_', ' ').toUpperCase() %>
-      </span>
-      <h2 class="card-title mt-1"><%= pdf.title %></h2>
+      <!-- Cover + Title row. Cover is autofilled from Google Books on upload
+           (no file stored — just the URL). Fallback to a generic PDF icon
+           when the uploader didn't pick a Google Books candidate. -->
+      <div class="d-flex gap-3 align-items-start mb-2">
+        <div style="flex-shrink: 0;">
+          <% if (pdf.cover_url) { %>
+            <img src="<%= pdf.cover_url %>" alt="Cover" class="rounded shadow-sm"
+                 style="width: 110px; height: 160px; object-fit: cover;">
+          <% } else { %>
+            <div class="rounded bg-light d-flex align-items-center justify-content-center border"
+                 style="width: 110px; height: 160px; font-size: 3rem;">📄</div>
+          <% } %>
+        </div>
+        <div class="flex-grow-1">
+          <span class="badge bg-<%= pdf.resource_type === 'textbook' ? 'primary' : pdf.resource_type === 'notes' ? 'success' : pdf.resource_type === 'previous_papers' ? 'warning text-dark' : 'secondary' %> mb-2">
+            <%= pdf.resource_type.replace('_', ' ').toUpperCase() %>
+          </span>
+          <h2 class="card-title mt-1 mb-0"><%= pdf.title %></h2>
+        </div>
+      </div>
 
       <!-- Metadata -->
       <table class="table table-sm table-borderless mt-3 mb-3" style="max-width: 400px;">
@@ -31,13 +46,22 @@
         <p class="card-text"><%= pdf.description %></p>
       <% } %>
 
-      <!-- Chapter headings if available -->
+      <!-- Chapter headings if available. Each entry is a subdocument
+           { title, page } — `page` may be null when extraction used the
+           heuristic scan (Tier 2) instead of an embedded TOC. -->
       <% if (pdf.chapter_headings && pdf.chapter_headings.length > 0) { %>
         <hr>
         <h6 class="text-muted">Chapters / Topics</h6>
         <ul class="list-group list-group-flush mb-3">
-          <% pdf.chapter_headings.slice(0, 10).forEach(h => { %>
-            <li class="list-group-item py-1 px-0 border-0"><small>📄 <%= h %></small></li>
+          <% pdf.chapter_headings.slice(0, 15).forEach(h => { %>
+            <li class="list-group-item py-1 px-0 border-0">
+              <small>
+                📄 <%= h.title || '(untitled section)' %>
+                <% if (h.page) { %>
+                  <span class="badge bg-light text-muted ms-1">p. <%= h.page %></span>
+                <% } %>
+              </small>
+            </li>
           <% }) %>
         </ul>
       <% } %>

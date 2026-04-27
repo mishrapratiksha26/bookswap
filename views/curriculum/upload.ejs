@@ -1,35 +1,290 @@
 <%- layout('layouts/boilerplate') %>
 
-<div class="container mt-4" style="max-width: 600px;">
-  <h2 class="mb-1">🎓 Curriculum Matcher</h2>
-  <p class="text-muted mb-4">
-    Upload your professor's lecture plan PDF and instantly see which books in our library
-    cover each topic — with chapter-level suggestions.
-  </p>
+<style>
+  /* Scoped to the curriculum page — uses design tokens from app.css so the
+     palette stays consistent with the home page and book pages. */
+  .curri-page {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 4rem;
+  }
 
-  <div class="card shadow-sm p-4">
+  .curri-hero {
+    text-align: center;
+    margin-bottom: 2.5rem;
+  }
+  .curri-hero__pill {
+    display: inline-block;
+    padding: 0.3rem 0.85rem;
+    background: var(--bs-primary-light, #d1f0e3);
+    color: var(--bs-primary, #00a98f);
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    margin-bottom: 1rem;
+  }
+  .curri-hero h1 {
+    font-size: clamp(1.7rem, 3.5vw, 2.4rem);
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    margin: 0 0 0.6rem;
+    color: var(--bs-text, #1e1f31);
+  }
+  .curri-hero p {
+    color: var(--bs-text-muted, #5a5e75);
+    font-size: 1.02rem;
+    line-height: 1.55;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .curri-upload-card {
+    background: var(--bs-surface, #fff);
+    border: 1px solid var(--bs-border, #e5e7eb);
+    border-radius: 16px;
+    padding: 2rem 1.8rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+    margin-bottom: 2rem;
+  }
+  .curri-upload-card label {
+    font-weight: 600;
+    color: var(--bs-text, #1e1f31);
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+  .curri-upload-card input[type="file"] {
+    width: 100%;
+    padding: 0.6rem 0.8rem;
+    border: 1.5px dashed var(--bs-border, #cbd5e1);
+    border-radius: 10px;
+    background: var(--bs-bg, #fafbfc);
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .curri-upload-card input[type="file"]:hover {
+    border-color: var(--bs-primary, #00a98f);
+    background: var(--bs-primary-light, #f0fdf6);
+  }
+  .curri-upload-card .form-hint {
+    font-size: 0.85rem;
+    color: var(--bs-text-subtle, #8a8e9c);
+    margin: 0.5rem 0 0;
+  }
+  .curri-submit {
+    display: block;
+    width: 100%;
+    margin-top: 1.5rem;
+    padding: 0.85rem;
+    background: var(--bs-primary, #00a98f);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+  }
+  .curri-submit:hover { background: var(--bs-primary-hover, #008f7a); }
+  .curri-submit:active { transform: scale(0.99); }
+
+  /* How it works */
+  .curri-how {
+    background: var(--bs-bg, #f8fafb);
+    border: 1px solid var(--bs-border, #eef0f3);
+    border-radius: 12px;
+    padding: 1.2rem 1.4rem;
+    margin-bottom: 3rem;
+  }
+  .curri-how h6 {
+    margin: 0 0 0.6rem;
+    font-weight: 700;
+    color: var(--bs-text, #1e1f31);
+    font-size: 0.92rem;
+  }
+  .curri-how ol {
+    margin: 0;
+    padding-left: 1.2rem;
+    color: var(--bs-text-muted, #5a5e75);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+
+  /* Saved curricula section */
+  .saved-section h2 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin: 0 0 0.4rem;
+    color: var(--bs-text, #1e1f31);
+  }
+  .saved-section .saved-sub {
+    color: var(--bs-text-muted, #5a5e75);
+    font-size: 0.92rem;
+    margin: 0 0 1.5rem;
+  }
+  .saved-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.1rem;
+  }
+  .saved-card {
+    background: var(--bs-surface, #fff);
+    border: 1px solid var(--bs-border, #e5e7eb);
+    border-radius: 14px;
+    padding: 1.2rem 1.3rem;
+    text-decoration: none;
+    color: inherit;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s;
+    display: block;
+    position: relative;
+    overflow: hidden;
+  }
+  .saved-card::before {
+    /* Subtle accent stripe on the left edge — picks up the primary colour */
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    background: var(--bs-primary, #00a98f);
+    opacity: 0.7;
+  }
+  .saved-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.07);
+    border-color: var(--bs-primary, #00a98f);
+    color: inherit;
+    text-decoration: none;
+  }
+  .saved-card__title {
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--bs-text, #1e1f31);
+    margin: 0 0 0.3rem;
+    line-height: 1.3;
+    /* clamp to 2 lines so very long names don't break the card height */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .saved-card__title .code {
+    color: var(--bs-text-muted, #5a5e75);
+    font-weight: 500;
+    font-size: 0.9rem;
+  }
+  .saved-card__meta {
+    color: var(--bs-text-muted, #5a5e75);
+    font-size: 0.82rem;
+    margin: 0.2rem 0 0;
+    line-height: 1.45;
+  }
+  .saved-card__meta .filename {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-all;
+  }
+  .saved-card__footer {
+    margin-top: 0.9rem;
+    padding-top: 0.7rem;
+    border-top: 1px solid var(--bs-border, #f1f3f5);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
+    color: var(--bs-text-subtle, #8a8e9c);
+  }
+  .saved-card__chip {
+    background: var(--bs-primary-light, #d1f0e3);
+    color: var(--bs-primary, #008f7a);
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 0.74rem;
+  }
+
+  /* Empty state above the upload card — only shown when no saved curricula */
+  .saved-empty {
+    text-align: center;
+    color: var(--bs-text-subtle, #8a8e9c);
+    padding: 1rem 0;
+    font-size: 0.9rem;
+  }
+</style>
+
+<div class="curri-page">
+
+  <!-- Hero -->
+  <div class="curri-hero">
+    <span class="curri-hero__pill">🎓 Curriculum Matcher</span>
+    <h1>Map your syllabus to the right chapter.</h1>
+    <p>Upload your professor's lecture plan PDF and instantly see which book in our
+       library covers each unit — with page-level chapter suggestions where the
+       PDF table-of-contents is available.</p>
+  </div>
+
+  <!-- Upload card -->
+  <div class="curri-upload-card">
     <form action="/curriculum" method="POST" enctype="multipart/form-data" class="validated-form">
-      <div class="mb-4">
-        <label class="form-label fw-semibold">Lecture Plan PDF</label>
-        <input type="file" name="pdf" class="form-control" accept=".pdf" required>
-        <div class="form-text">
-          Works best with IIT ISM standard 2-page lecture plan format.
-          Scanned/image PDFs may not parse correctly.
-        </div>
-      </div>
-
-      <button type="submit" class="btn btn-success w-100">
-        🔍 Match Topics to Books
-      </button>
+      <label>Lecture Plan PDF</label>
+      <input type="file" name="pdf" accept=".pdf" required>
+      <p class="form-hint">
+        Works best with IIT (ISM) standard 2-page lecture-plan format. Scanned image
+        PDFs are now supported via OCR fallback (slower — give it a few seconds).
+      </p>
+      <button type="submit" class="curri-submit">🔍 Match Topics to Books</button>
     </form>
   </div>
 
-  <div class="mt-4 p-3 bg-light rounded">
-    <h6>How it works:</h6>
-    <ol class="text-muted small">
-      <li>We extract all lecture topics from your PDF</li>
-      <li>Each topic is matched to the most relevant book in our inventory using AI embeddings</li>
-      <li>We suggest the specific chapter in that book that best covers the topic</li>
+  <!-- How it works -->
+  <div class="curri-how">
+    <h6>How it works</h6>
+    <ol>
+      <li>We parse every unit and the professor's recommended textbooks from the lecture plan.</li>
+      <li>Each unit is matched against books in our inventory using semantic similarity, with an LLM judge to filter out wrong-domain matches.</li>
+      <li>For matched books, we surface the specific chapter that best covers the unit — with a page number when the PDF has an embedded table-of-contents.</li>
     </ol>
   </div>
+
+  <!-- Saved curricula -->
+  <% if (typeof saved !== 'undefined' && saved && saved.length > 0) { %>
+    <div class="saved-section">
+      <h2>📚 Your saved curricula</h2>
+      <p class="saved-sub">
+        Each upload is snapshotted to your profile so you can revisit the match
+        anytime — without re-parsing the PDF.
+      </p>
+      <div class="saved-grid">
+        <% saved.forEach(s => { %>
+          <a href="/curriculum/<%= s._id %>" class="saved-card">
+            <h3 class="saved-card__title">
+              <% if (s.course_name) { %>
+                <%= s.course_name %>
+                <% if (s.course_code) { %>
+                  <span class="code">(<%= s.course_code %>)</span>
+                <% } %>
+              <% } else { %>
+                <%= s.pdf_filename || 'Saved curriculum' %>
+              <% } %>
+            </h3>
+            <% if (s.department) { %>
+              <p class="saved-card__meta"><%= s.department %></p>
+            <% } %>
+            <% if (s.pdf_filename) { %>
+              <p class="saved-card__meta filename">📎 <%= s.pdf_filename %></p>
+            <% } %>
+            <div class="saved-card__footer">
+              <span><%= new Date(s.created_at).toLocaleDateString('en-GB',
+                  { day: 'numeric', month: 'short', year: 'numeric' }) %></span>
+              <% if (s.parsed_result && s.parsed_result.n_units_parsed) { %>
+                <span class="saved-card__chip"><%= s.parsed_result.n_units_parsed %> units</span>
+              <% } %>
+            </div>
+          </a>
+        <% }) %>
+      </div>
+    </div>
+  <% } %>
+
 </div>

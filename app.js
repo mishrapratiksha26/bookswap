@@ -36,6 +36,7 @@ const upload = multer({ storage });
 const Review = require("./models/review");
 const Pdf = require("./models/pdf");
 const Course = require("./models/course");
+const Curriculum = require("./models/curriculum");
 
 // Canonical 17 IIT (ISM) Dhanbad departments.
 // Hardcoded (rather than Course.distinct('department')) because:
@@ -377,24 +378,51 @@ app.get(
   catchAsync(async (req, res, next) => {
     const user = req.user;
     const books = await Book.find({ owner: user._id });
-    const borrowRequests = await BorrowRequest.find({ 
-      owner: user._id, 
-      status: 'pending' 
-    }).populate('book').populate('borrower');
-    const myBorrowRequests = await BorrowRequest.find({ 
-      borrower: user._id 
-    }).populate('book').populate('owner');
-    const borrowedBooks = await Book.find({ 
-      _id: { $in: user.borrowedBooks } 
-    });
+
+    // Helper: drop borrow records whose populated `book` or counter-party
+    // user is null. Mongoose's populate returns null for ObjectIds whose
+    // target document was deleted (rather than throwing), so dangling
+    // references would otherwise crash the EJS or render misleadingly.
+    // This is the source of the "(book no longer available)" rows the
+    // tester saw — those records came from books the lender deleted
+    // after the borrow was approved.
+    const dropDangling = (req, sides) => req.filter(r => sides.every(side => r[side]));
+
+    const borrowRequests = dropDangling(
+      await BorrowRequest.find({ owner: user._id, status: 'pending' })
+        .populate('book').populate('borrower'),
+      ['book', 'borrower']
+    );
+    const myBorrowRequests = dropDangling(
+      await BorrowRequest.find({ borrower: user._id })
+        .populate('book').populate('owner'),
+      ['book', 'owner']
+    );
+
+    // "Books You Are Borrowing" is now derived directly from approved
+    // BorrowRequest documents rather than from the denormalised
+    // user.borrowedBooks ObjectId array. Reason: the array can drift
+    // out of sync with reality (a book gets deleted; the array still
+    // holds its id; Book.find returns nothing for that id; the section
+    // appears empty even though the user clearly has approved borrows
+    // showing in My Borrow Requests). Deriving from BorrowRequest with
+    // populate keeps the two sections consistent.
+    const approvedAsBorrower = dropDangling(
+      await BorrowRequest.find({ borrower: user._id, status: 'approved' })
+        .populate('book'),
+      ['book']
+    );
+    const borrowedBooks = approvedAsBorrower.map(r => r.book);
+
     const lentBooks = await Book.find({
       owner: user._id,
       available: false
     });
-    const activeLentRequests = await BorrowRequest.find({
-      owner: user._id,
-      status: 'approved'
-    }).populate('book').populate('borrower');
+    const activeLentRequests = dropDangling(
+      await BorrowRequest.find({ owner: user._id, status: 'approved' })
+        .populate('book').populate('borrower'),
+      ['book', 'borrower']
+    );
     res.render("users/profile", { user, books, borrowRequests, myBorrowRequests, borrowedBooks, lentBooks, activeLentRequests });
   })
 );
@@ -534,8 +562,18 @@ app.post(
   upload.array("image"),
   catchAsync(async (req, res) => {
     if (!req.body.book) throw new ExpressError("Invalid Book Data", 400);
+    // cover_url is autofilled from Google Books on the upload form — it's
+    // not a Book schema field, so pull it out before constructing the doc.
+    // If the user didn't upload any image files, we fall back to the
+    // Google Books cover as the book's (only) image. This keeps storage
+    // cost at zero for users who don't want to upload their own photos.
+    const coverUrl = req.body.book.cover_url;
+    delete req.body.book.cover_url;
     const book = new Book(req.body.book);
     book.images = req.files.map((f) => ({ url: f.path, filename: f.filename }));
+    if (coverUrl && book.images.length === 0) {
+        book.images.push({ url: coverUrl, filename: "" });
+    }
     book.owner = req.user._id;
     // console.log(req.user);
     await book.save();
@@ -1135,7 +1173,11 @@ app.post("/pdfs", isLoggedIn, uploadPdf.single("pdf"), catchAsync(async (req, re
     title, subject, course, department, professor, resource_type, description,
     // Resource-type-specific extras. Form submits empty strings for fields
     // not relevant to the chosen type; Mongoose coerces "" to default below.
-    semester, topic, exam_type, year
+    semester, topic, exam_type, year,
+    // Autofilled from Google Books on the upload form. Blank string if the
+    // user didn't pick a candidate — schema defaults to "" in that case and
+    // the PDF card will render a generic icon instead of a cover thumbnail.
+    cover_url
   } = req.body;
 
   if (!req.file) {
@@ -1162,6 +1204,7 @@ app.post("/pdfs", isLoggedIn, uploadPdf.single("pdf"), catchAsync(async (req, re
     description,
     cloudinary_url: req.file.path,
     cloudinary_public_id: req.file.filename,
+    cover_url: cover_url || "",
     uploadedBy: req.user._id
   });
 
@@ -1218,9 +1261,16 @@ app.delete("/pdfs/:id", isLoggedIn, catchAsync(async (req, res) => {
 // Upload a lecture plan PDF → get topic-to-book matches from Python service
 // =============================================================================
 
-app.get("/curriculum", isLoggedIn, (req, res) => {
-  res.render("curriculum/upload");
-});
+app.get("/curriculum", isLoggedIn, catchAsync(async (req, res) => {
+  // Show the upload form alongside a list of the user's previously saved
+  // curricula, newest first. If this is the user's first visit, the list is
+  // just empty — the upload form still works identically.
+  const saved = await Curriculum.find({ user_id: req.user._id })
+    .sort({ created_at: -1 })
+    .select("course_name course_code department pdf_filename created_at parsed_result.n_units_parsed")
+    .lean();
+  res.render("curriculum/upload", { saved });
+}));
 
 app.post("/curriculum", isLoggedIn, uploadPdf.single("pdf"), catchAsync(async (req, res) => {
   if (!req.file) {
@@ -1245,14 +1295,155 @@ app.post("/curriculum", isLoggedIn, uploadPdf.single("pdf"), catchAsync(async (r
     });
 
     const matchData = aiResponse.data;
+
+    // --- Snapshot-save for profile history ---------------------------------
+    // Persist the parsed result so the student can revisit it from their
+    // profile. We only save when the Python service actually returned a
+    // usable result — if matchData.error is set, there's nothing worth
+    // keeping in history. Saving still continues to the render path either
+    // way, so errors are displayed to the user normally.
+    let savedDoc = null;
+    if (!matchData.error) {
+      try {
+        savedDoc = await Curriculum.create({
+          user_id:        req.user._id,
+          course_name:    matchData.course_name || "",
+          course_code:    matchData.course_code || "",
+          department:     matchData.department  || "",
+          pdf_filename:   req.file.originalname || "",
+          parsed_result:  matchData,
+          prompt_version: matchData.prompt_version || "",
+        });
+      } catch (saveErr) {
+        // Don't block the user's result view on a history-save failure.
+        // Log it and carry on — the student still sees their matches.
+        console.warn("Curriculum history save failed:", saveErr.message);
+      }
+    }
+
     // NOTE: don't pass a local called `filename` — EJS treats that key as
     // reserved (it's the internal template path used for error messages),
     // and our value gets silently overridden. Use `uploadedFilename` instead.
-    res.render("curriculum/results", { matchData, uploadedFilename: req.file.originalname });
+    res.render("curriculum/results", {
+      matchData,
+      uploadedFilename: req.file.originalname,
+      savedCurriculum: savedDoc,   // null when save was skipped; results.ejs
+                                   // uses this to decide whether to show the
+                                   // "saved to profile" banner / delete button
+    });
   } catch (e) {
     console.error("Curriculum match error:", e.message);
     req.flash("error", "Could not process the lecture plan. Please try again.");
     res.redirect("/curriculum");
+  }
+}));
+
+// --- Saved curriculum history ------------------------------------------------
+// GET /curriculum/history — full list of this user's saved runs
+// GET /curriculum/:id     — render a single saved run through results.ejs
+// DELETE /curriculum/:id  — owner-only delete (BOLA check: user_id must match)
+// -----------------------------------------------------------------------------
+
+// /curriculum/history is an alias for /curriculum — the upload page already
+// renders the user's saved list below the upload form. Keeping the URL so
+// external links / profile menus can deep-link to "history" without a 404.
+app.get("/curriculum/history", isLoggedIn, (req, res) => {
+  res.redirect("/curriculum");
+});
+
+app.get("/curriculum/:id", isLoggedIn, catchAsync(async (req, res) => {
+  const doc = await Curriculum.findById(req.params.id).lean();
+  if (!doc) {
+    req.flash("error", "Saved curriculum not found.");
+    return res.redirect("/curriculum");
+  }
+  // BOLA guard — only the owner can read. Without this, any logged-in user
+  // could GET /curriculum/<someone-else's-id> and see their syllabus match.
+  if (String(doc.user_id) !== String(req.user._id)) {
+    req.flash("error", "You do not have access to that saved curriculum.");
+    return res.redirect("/curriculum");
+  }
+  res.render("curriculum/results", {
+    matchData:        doc.parsed_result || {},
+    uploadedFilename: doc.pdf_filename || "",
+    savedCurriculum:  doc,    // enables the "saved on <date>" banner + delete
+  });
+}));
+
+app.delete("/curriculum/:id", isLoggedIn, catchAsync(async (req, res) => {
+  const doc = await Curriculum.findById(req.params.id);
+  if (!doc) {
+    req.flash("error", "Saved curriculum not found.");
+    return res.redirect("/curriculum");
+  }
+  if (String(doc.user_id) !== String(req.user._id)) {
+    req.flash("error", "You do not have permission to delete that.");
+    return res.redirect("/curriculum");
+  }
+  await Curriculum.findByIdAndDelete(req.params.id);
+  req.flash("success", "Saved curriculum removed.");
+  res.redirect("/curriculum");
+}));
+
+// =============================================================================
+// AI CHAT PROXY — POST /api/ai-chat
+//
+// The chat widget on every page POSTs here instead of calling the Python
+// FastAPI service directly. Two reasons this proxy is non-negotiable in
+// production:
+//
+//   1. Security. user_id is read from req.user._id (Passport's server-side
+//      session) and forwarded to Python. If the browser called Python
+//      directly, user_id would be a client-supplied field — trivially
+//      forgeable, breaking any per-user feature (taste vector, history).
+//      With the proxy the Python service can trust user_id as ground truth
+//      coming from an authenticated Node session.
+//
+//   2. Deployability. On Render the Python service has its own URL
+//      (process.env.AI_SERVICE_URL). Hard-coding it in the browser-side
+//      EJS would mean every redeploy with a new URL needs a frontend
+//      change. Routing through the same origin keeps the browser code
+//      origin-relative ("/api/ai-chat").
+//
+// Pattern mirrors the existing /search and /curriculum routes that also
+// proxy to the Python service.
+// =============================================================================
+app.post("/api/ai-chat", isLoggedIn, catchAsync(async (req, res) => {
+  const { message, session_id } = req.body;
+  if (!message || typeof message !== "string" || !message.trim()) {
+    return res.status(400).json({ error: "Message is required" });
+  }
+
+  const aiUrl = process.env.AI_SERVICE_URL || "http://127.0.0.1:8001";
+
+  try {
+    const aiResponse = await fetch(`${aiUrl}/agent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        message: message.trim(),
+        session_id: session_id || null,
+        // user_id comes from the server-side Passport session — NOT from
+        // anything the browser sent. This is the security boundary.
+        user_id: req.user._id.toString(),
+      }),
+    });
+
+    if (!aiResponse.ok) {
+      const text = await aiResponse.text();
+      console.warn("AI chat upstream error:", aiResponse.status, text);
+      return res.status(502).json({
+        response: "Sorry, the AI service is unavailable right now. Try again in a moment.",
+      });
+    }
+
+    const data = await aiResponse.json();
+    return res.json(data);
+  } catch (err) {
+    console.error("AI chat proxy error:", err.message);
+    return res.status(502).json({
+      response: "Sorry, I couldn't reach the AI service. Try again in a moment.",
+    });
   }
 }));
 

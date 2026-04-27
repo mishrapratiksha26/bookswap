@@ -24,6 +24,31 @@
         padding: 2rem;
         box-shadow: var(--bs-shadow-sm);
     }
+    .format-toggle {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1.5rem;
+        padding: 0.3rem;
+        background: var(--bs-surface-alt);
+        border-radius: var(--bs-radius-md);
+    }
+    .format-toggle button {
+        flex: 1;
+        padding: 0.7rem 1rem;
+        background: transparent;
+        border: none;
+        border-radius: var(--bs-radius-sm);
+        font-size: 0.95rem;
+        font-weight: 500;
+        color: var(--bs-text-muted);
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s;
+    }
+    .format-toggle button.active {
+        background: var(--bs-surface);
+        color: var(--bs-primary);
+        box-shadow: var(--bs-shadow-sm);
+    }
     .autofill-box {
         background: var(--bs-primary-light);
         border: 1px solid var(--bs-primary);
@@ -78,24 +103,63 @@
         color: var(--bs-text-muted);
         line-height: 1.3;
     }
+    .cover-preview {
+        display: none;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.8rem;
+        background: var(--bs-surface-alt);
+        border-radius: var(--bs-radius-md);
+        margin-bottom: 1rem;
+    }
+    .cover-preview img {
+        width: 60px; height: 84px;
+        object-fit: cover;
+        border-radius: 4px;
+    }
+    .cover-preview .meta {
+        flex: 1;
+        font-size: 0.85rem;
+        color: var(--bs-text-muted);
+    }
+    .help-text {
+        font-size: 0.8rem;
+        color: var(--bs-text-muted);
+        margin-top: 0.3rem;
+    }
 </style>
 
 <div class="new-book-wrap">
-    <h1>Post a Book</h1>
-    <p class="subtitle">Share a book you'd like to lend out. We'll help you fill in the details.</p>
+    <h1>Share a Resource</h1>
+    <p class="subtitle">Lend a physical book or upload a PDF — same flow, we'll route it correctly.</p>
 
     <div class="form-card">
-        <!-- ─── Google Books autofill assistant ──────────────────────────
+        <!-- ─── Format toggle ─────────────────────────────────────────────
+             Unifies the physical-book and PDF upload flows visually while
+             keeping the backend routes split (/books vs /pdfs) — each has
+             its own validation and field shape, and merging them into one
+             Resource model would force half-null columns. The toggle swaps
+             which <form> element is visible; Google Books autofill above
+             populates whichever is active.
+          ───────────────────────────────────────────────────────────────── -->
+        <div class="format-toggle" role="tablist">
+            <button type="button" id="tab-physical" class="active" onclick="switchFormat('physical')">
+                📗 Physical book
+            </button>
+            <button type="button" id="tab-pdf" onclick="switchFormat('pdf')">
+                📄 PDF / digital
+            </button>
+        </div>
+
+        <!-- ─── Google Books autofill (shared across both forms) ───────────
              Rationale: cuts data-entry friction AND improves recommendation
              quality (richer descriptions → better embeddings → better
-             semantic search results downstream). The LLM indexer reads the
-             description field; a populated Google Books description is
-             almost always longer + more informative than what a busy
-             student types manually.
-          ──────────────────────────────────────────────────────────────── -->
+             semantic search results downstream). Populates whichever form
+             is currently visible — title/author/description/year/cover.
+          ─────────────────────────────────────────────────────────────────── -->
         <div class="autofill-box">
             <h4>✨ Auto-fill from Google Books</h4>
-            <p>Type the title (and optionally author), then click fetch — we'll look up the cover, description, and publication year for you.</p>
+            <p>Type the title (and optionally author), then click fetch — we'll look up the cover, description, and publication year.</p>
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                 <input type="text" id="lookup-title"  class="form-control" placeholder="Book title" style="flex: 2 1 180px;">
                 <input type="text" id="lookup-author" class="form-control" placeholder="Author (optional)" style="flex: 1 1 140px;">
@@ -107,15 +171,37 @@
             <p id="autofill-status" style="color: var(--bs-text-muted); font-size: 0.8rem; margin: 0.6rem 0 0; display: none;"></p>
         </div>
 
-        <form action="/books" method="POST" novalidate class="validated-form" enctype="multipart/form-data">
+        <!-- ─── Shared cover preview ─────────────────────────────────────
+             Rendered once; read by whichever form is visible. On submit,
+             the visible form's hidden cover_url input already carries the
+             URL, so we don't need to duplicate the preview per form.
+          ─────────────────────────────────────────────────────────────── -->
+        <div id="cover-preview" class="cover-preview">
+            <img id="cover-preview-img" src="" alt="Cover preview">
+            <div class="meta">
+                <div><strong>Cover selected from Google Books</strong></div>
+                <div id="cover-preview-caption" style="margin-top: 0.2rem;"></div>
+            </div>
+            <button type="button" class="bs-btn bs-btn--ghost" onclick="clearCover()">Remove</button>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════════════
+             FORM A — Physical book (posts to /books, nested book[...] keys)
+             ═══════════════════════════════════════════════════════════════ -->
+        <form id="form-physical" action="/books" method="POST" novalidate class="validated-form" enctype="multipart/form-data">
+            <!-- Hidden: URL of cover fetched from Google Books. Server-side
+                 POST /books checks this; if present + no file uploaded, it
+                 stores {url, filename:""} in book.images so the cover flows
+                 through the existing images[] pipeline without schema churn. -->
+            <input type="hidden" id="physical-cover-url" name="book[cover_url]" value="">
 
             <div class="mb-3">
-                <label class="form-label" for="title">Title: </label>
+                <label class="form-label" for="title">Title:</label>
                 <input class="form-control" type="text" id="title" name="book[title]" required>
             </div>
 
             <div class="mb-3">
-                <label class="form-label" for="author">Author: </label>
+                <label class="form-label" for="author">Author:</label>
                 <input class="form-control" type="text" id="author" name="book[author]" required>
             </div>
 
@@ -137,12 +223,6 @@
                 </select>
             </div>
 
-            <!-- Conditional academic fields — only for EDUCATIONAL genre.
-                 Mirrors the PDF upload form: dept → course cascade backed by
-                 the canonical NEP catalogue (GET /api/courses?dept=<code>),
-                 plus a resource_type dropdown that reveals notes or PYQ
-                 metadata so a student can lend out hand-written notes or
-                 hard-copy previous year papers, not just textbooks. -->
             <div id="educational-fields" style="display: none;">
                 <div class="alert alert-info py-2 small">
                     📚 Academic material — help fellow students find it by course &amp; department.
@@ -177,7 +257,6 @@
                     </select>
                 </div>
 
-                <!-- Notes-specific extras (shown when resource_type=notes) -->
                 <div id="notes-extras" class="row mb-3" style="display: none;">
                     <div class="col">
                         <label class="form-label">Semester</label>
@@ -194,7 +273,6 @@
                     </div>
                 </div>
 
-                <!-- PYQ-specific extras (shown when resource_type=previous_papers) -->
                 <div id="pyq-extras" class="row mb-3" style="display: none;">
                     <div class="col">
                         <label class="form-label">Exam type</label>
@@ -220,6 +298,7 @@
             </div>
 
             <div class="mb-3">
+                <label class="form-label">Or upload your own cover image(s):</label>
                 <div class="form-file custom-file">
                     <input type="file" class="form-file-input" id="image" name="image" multiple>
                     <label class="form-file-label" for="image">
@@ -227,6 +306,7 @@
                         <span class="form-file-button">Browse</span>
                     </label>
                 </div>
+                <div class="help-text">Skip this if you've picked a cover from Google Books above.</div>
             </div>
 
             <div class="mb-3">
@@ -235,12 +315,13 @@
             </div>
 
             <div class="mb-3">
-                <label class="form-label" for="price">Original Price:</label>
+                <label class="form-label" for="price">Lending Price:</label>
                 <div class="input-group">
                     <span class="input-group-text" id="price-label">&#x20b9;</span>
                     <input type="text" class="form-control" placeholder="0" id="price"
                            aria-label="price" aria-describedby="price-label" name="book[price]" required>
                 </div>
+                <div class="help-text">Set your own lending price. Google Books can't auto-fill this for academic books.</div>
             </div>
 
             <div class="mb-3">
@@ -248,30 +329,166 @@
                 <a href="/books" class="bs-btn bs-btn--ghost" style="margin-left: 0.5rem;">Cancel</a>
             </div>
         </form>
+
+        <!-- ═══════════════════════════════════════════════════════════════
+             FORM B — PDF / digital resource (posts to /pdfs, flat keys)
+             Shown only when the user toggles to "PDF / digital" at top.
+             Different field shape than Form A because the Pdf model has
+             different required fields (no price, has subject + professor +
+             file upload). Keeping two forms avoids JS name-rewriting on
+             submit, which is a common source of form bugs.
+             ═══════════════════════════════════════════════════════════════ -->
+        <form id="form-pdf" action="/pdfs" method="POST" novalidate class="validated-form" enctype="multipart/form-data" style="display: none;">
+            <!-- Cover URL: stored as pdf.cover_url (new field on Pdf model).
+                 Rendered on PDF cards + detail pages; falls back to a generic
+                 icon when blank. Autofilled from Google Books; no file upload
+                 path for PDF covers (intentional — keeps form light). -->
+            <input type="hidden" id="pdf-cover-url" name="cover_url" value="">
+
+            <div class="mb-3">
+                <label class="form-label" for="pdf-title">Title:</label>
+                <input class="form-control" type="text" id="pdf-title" name="title" required>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="pdf-subject">Subject:</label>
+                <input class="form-control" type="text" id="pdf-subject" name="subject"
+                       placeholder="e.g. Operating Systems, Linear Algebra" required>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col">
+                    <label class="form-label" for="pdf-department">Department:</label>
+                    <select class="form-select" id="pdf-department" name="department">
+                        <option value="" selected>Pick a department...</option>
+                        <% departments.forEach(d => { %>
+                            <option value="<%= d.code %>"><%= d.code %> — <%= d.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+                <div class="col">
+                    <label class="form-label" for="pdf-course">Course:</label>
+                    <select class="form-select" id="pdf-course" name="course" disabled>
+                        <option value="" selected>Pick a department first...</option>
+                    </select>
+                    <div class="form-text" id="pdf-course-help">Optional.</div>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="pdf-professor">Professor (optional):</label>
+                <input class="form-control" type="text" id="pdf-professor" name="professor"
+                       placeholder="e.g. Prof. R. Kumar">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="pdf-resource-type">Type of material:</label>
+                <select class="form-select" id="pdf-resource-type" name="resource_type">
+                    <option value="textbook">Textbook / soft-copy</option>
+                    <option value="notes" selected>Notes</option>
+                    <option value="previous_papers">Previous Year Papers</option>
+                    <option value="reference">Reference Material</option>
+                </select>
+            </div>
+
+            <!-- Conditional PDF-specific extras, mirroring physical form's
+                 notes-extras / pyq-extras pattern. Same JS toggler reused. -->
+            <div id="pdf-notes-extras" class="row mb-3" style="display: none;">
+                <div class="col">
+                    <label class="form-label">Semester</label>
+                    <select class="form-select" name="semester">
+                        <option value="">—</option>
+                        <% for (let s = 1; s <= 10; s++) { %>
+                            <option value="<%= s %>"><%= s %></option>
+                        <% } %>
+                    </select>
+                </div>
+                <div class="col">
+                    <label class="form-label">Topic covered</label>
+                    <input type="text" class="form-control" name="topic" placeholder="e.g. Process scheduling">
+                </div>
+            </div>
+
+            <div id="pdf-pyq-extras" class="row mb-3" style="display: none;">
+                <div class="col">
+                    <label class="form-label">Exam type</label>
+                    <select class="form-select" name="exam_type">
+                        <option value="">—</option>
+                        <option value="mid_sem">Mid-sem</option>
+                        <option value="end_sem">End-sem</option>
+                        <option value="quiz">Quiz / Class test</option>
+                        <option value="assignment">Assignment</option>
+                    </select>
+                </div>
+                <div class="col">
+                    <label class="form-label">Exam Year</label>
+                    <input type="number" class="form-control" name="year" min="2000" max="2099" placeholder="e.g. 2024">
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="pdf-description">Description:</label>
+                <textarea class="form-control" id="pdf-description" name="description" rows="5"
+                          placeholder="What does this PDF cover? Help other students find it."></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="pdf-file">PDF file:</label>
+                <input type="file" class="form-control" id="pdf-file" name="pdf" accept="application/pdf" required>
+                <div class="help-text">Max 20 MB. Will be hosted on Cloudinary and indexed for curriculum matching.</div>
+            </div>
+
+            <div class="mb-3">
+                <button class="bs-btn bs-btn--primary">Upload PDF</button>
+                <a href="/books" class="bs-btn bs-btn--ghost" style="margin-left: 0.5rem;">Cancel</a>
+            </div>
+        </form>
     </div>
 </div>
 
 <script>
-    // Show/hide academic fields when genre changes.
+    // ─── Format toggle (Physical ↔ PDF) ─────────────────────────────────
+    // Only one form is visible at a time. The shared Google Books widget
+    // + cover preview above populate whichever is active, by reading a
+    // data-attribute we set here ("physical" | "pdf").
+    function switchFormat(fmt) {
+        const physical = document.getElementById('form-physical');
+        const pdf      = document.getElementById('form-pdf');
+        const tabP     = document.getElementById('tab-physical');
+        const tabD     = document.getElementById('tab-pdf');
+
+        if (fmt === 'pdf') {
+            physical.style.display = 'none';
+            pdf.style.display      = '';
+            tabP.classList.remove('active');
+            tabD.classList.add('active');
+        } else {
+            physical.style.display = '';
+            pdf.style.display      = 'none';
+            tabP.classList.add('active');
+            tabD.classList.remove('active');
+        }
+        document.body.dataset.activeForm = fmt;
+        // Clear any previously-applied cover when switching — forces the
+        // user to re-pick consciously for the new format, avoids confusion.
+        clearCover();
+    }
+    // Default: physical.
+    document.body.dataset.activeForm = 'physical';
+
+    // Show/hide academic fields when genre changes (physical form only).
     function toggleEducationalFields(genre) {
         const block = document.getElementById('educational-fields');
         block.style.display = (genre === 'EDUCATIONAL') ? 'block' : 'none';
     }
 
-    // ─── Department → Course cascade ────────────────────────────────────
-    // Mirrors the PDF upload form. When the user picks a department, fetch
-    // that department's course list from /api/courses?dept=<code> and
-    // populate the course <select>. In-memory cache so re-picking a dept
-    // is free. Option value is "CODE - Name" so the Python-side matcher
-    // can substring-match on either code or name.
+    // ─── Department → Course cascade (applies to BOTH forms) ─────────────
+    // Each form has its own dept + course selects, wired independently so
+    // switching format doesn't leak state.
     (function () {
-        const deptSelect   = document.getElementById('department');
-        const courseSelect = document.getElementById('course');
-        const courseHelp   = document.getElementById('course-help');
-        if (!deptSelect || !courseSelect) return;
-        const cache = {};
+        const cache = {};   // shared — same API, same cache key by dept code
 
-        async function loadCourses(deptCode) {
+        async function loadCourses(deptCode, courseSelect, courseHelp) {
             courseSelect.disabled = true;
             courseSelect.innerHTML = '<option value="">Loading...</option>';
             let courses = cache[deptCode];
@@ -299,32 +516,46 @@
             if (courseHelp) courseHelp.textContent = `${courses.length} courses in this department. Optional.`;
         }
 
-        deptSelect.addEventListener('change', e => {
-            if (e.target.value) loadCourses(e.target.value);
-        });
+        // Physical form
+        const pDept   = document.getElementById('department');
+        const pCourse = document.getElementById('course');
+        const pHelp   = document.getElementById('course-help');
+        if (pDept && pCourse) {
+            pDept.addEventListener('change', e => {
+                if (e.target.value) loadCourses(e.target.value, pCourse, pHelp);
+            });
+        }
+        // PDF form
+        const dDept   = document.getElementById('pdf-department');
+        const dCourse = document.getElementById('pdf-course');
+        const dHelp   = document.getElementById('pdf-course-help');
+        if (dDept && dCourse) {
+            dDept.addEventListener('change', e => {
+                if (e.target.value) loadCourses(e.target.value, dCourse, dHelp);
+            });
+        }
     })();
 
-    // ─── Resource-type → conditional extras ─────────────────────────────
-    // "notes" → show semester + topic fields; "previous_papers" → show
-    // exam type + year; textbook/reference show nothing extra.
+    // ─── Resource-type → conditional extras (both forms) ────────────────
     (function () {
-        const rtSelect    = document.getElementById('resource_type');
-        const notesExtras = document.getElementById('notes-extras');
-        const pyqExtras   = document.getElementById('pyq-extras');
-        if (!rtSelect) return;
-        function syncExtras() {
-            const v = rtSelect.value;
-            notesExtras.style.display = (v === 'notes') ? '' : 'none';
-            pyqExtras.style.display   = (v === 'previous_papers') ? '' : 'none';
+        function wire(selectId, notesId, pyqId) {
+            const sel = document.getElementById(selectId);
+            const n   = document.getElementById(notesId);
+            const p   = document.getElementById(pyqId);
+            if (!sel) return;
+            function sync() {
+                const v = sel.value;
+                if (n) n.style.display = (v === 'notes') ? '' : 'none';
+                if (p) p.style.display = (v === 'previous_papers') ? '' : 'none';
+            }
+            sel.addEventListener('change', sync);
+            sync();
         }
-        rtSelect.addEventListener('change', syncExtras);
-        syncExtras();
+        wire('resource_type',     'notes-extras',     'pyq-extras');
+        wire('pdf-resource-type', 'pdf-notes-extras', 'pdf-pyq-extras');
     })();
 
     // ─── Google Books autofill ──────────────────────────────────────────
-    // Hits our /api/book-metadata proxy, shows up to 5 candidates; user
-    // picks one and its fields flow into the real form. Works even offline
-    // or if Google Books is down — the form still submits manually.
     async function fetchMetadata() {
         const title  = document.getElementById('lookup-title').value.trim();
         const author = document.getElementById('lookup-author').value.trim();
@@ -355,8 +586,7 @@
                 return;
             }
 
-            // Build candidate picker
-            data.candidates.forEach((c, idx) => {
+            data.candidates.forEach(c => {
                 const row = document.createElement('div');
                 row.className = 'candidate';
                 row.innerHTML = `
@@ -382,17 +612,51 @@
         }
     }
 
-    // Paste the chosen candidate into the real form fields.
+    // Paste the chosen candidate into the CURRENTLY-VISIBLE form.
+    // Both forms get the cover URL; description/year/title/author flow to
+    // whichever form matches the field shape (physical vs pdf).
     function applyCandidate(c) {
-        document.getElementById('title').value       = c.title || '';
-        document.getElementById('author').value      = (c.authors || []).join(', ');
-        document.getElementById('description').value = c.description || '';
-        if (c.publication_year) document.getElementById('publication_year').value = c.publication_year;
-        document.getElementById('candidate-list').style.display = 'none';
+        const fmt = document.body.dataset.activeForm || 'physical';
 
+        if (fmt === 'physical') {
+            document.getElementById('title').value       = c.title || '';
+            document.getElementById('author').value      = (c.authors || []).join(', ');
+            document.getElementById('description').value = c.description || '';
+            if (c.publication_year) document.getElementById('publication_year').value = c.publication_year;
+            document.getElementById('physical-cover-url').value = c.cover_url || '';
+        } else {
+            document.getElementById('pdf-title').value       = c.title || '';
+            document.getElementById('pdf-description').value = c.description || '';
+            // Subject stays user-entered — Google Books doesn't give us a
+            // clean "subject" (only free-text categories), and IIT subject
+            // names are local (e.g. "Operating Systems" vs Google's "Computers").
+            document.getElementById('pdf-cover-url').value   = c.cover_url || '';
+        }
+
+        // Show the shared cover preview.
+        if (c.cover_url) {
+            document.getElementById('cover-preview-img').src = c.cover_url;
+            document.getElementById('cover-preview-caption').textContent =
+                `${c.title}${(c.authors && c.authors.length) ? ' — ' + c.authors.join(', ') : ''}`;
+            document.getElementById('cover-preview').style.display = 'flex';
+        } else {
+            clearCover();
+        }
+
+        document.getElementById('candidate-list').style.display = 'none';
         const status = document.getElementById('autofill-status');
         status.innerHTML = `✅ Applied: <strong>${escapeHtml(c.title)}</strong>. Review and adjust as needed.`;
         status.style.display = 'block';
+    }
+
+    // Remove a previously-applied cover — clears both hidden inputs + preview.
+    function clearCover() {
+        const p = document.getElementById('physical-cover-url');
+        const d = document.getElementById('pdf-cover-url');
+        if (p) p.value = '';
+        if (d) d.value = '';
+        const prev = document.getElementById('cover-preview');
+        if (prev) prev.style.display = 'none';
     }
 
     // Tiny XSS guard — Google Books description could contain entities.
