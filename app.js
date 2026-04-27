@@ -1289,9 +1289,28 @@ app.post("/curriculum", isLoggedIn, uploadPdf.single("pdf"), catchAsync(async (r
       contentType: "application/pdf"
     });
 
+    // Long timeout (90 s) because the first curriculum upload after the
+    // Python service has been idle has to absorb several stacked latencies:
+    //
+    //   - Render free-plan cold-start (up to 30 s to wake the container)
+    //   - First-time SentenceTransformer model load (~10-15 s, lazy-loaded
+    //     on first embedding call — see app/embeddings.py)
+    //   - OCR pass on scanned-PDF lecture plans (~5-10 s per page)
+    //   - Curriculum pipeline itself (parse + book judge + chapter judge,
+    //     ~5-10 s of Groq calls)
+    //
+    // 30 s was the original timeout — it routinely fired before the Python
+    // pipeline finished even on warm calls when the PDF was scanned. 90 s
+    // gives comfortable headroom; subsequent warm calls return in 5-10 s
+    // and don't notice the higher ceiling.
     const aiResponse = await axios.post(`${aiUrl}/curriculum`, formData, {
       headers: formData.getHeaders(),
-      timeout: 30000
+      timeout: 90000,
+      // Without these two, axios buffers the whole multipart upload AND
+      // the whole response in memory before the request even leaves Node,
+      // which can pin Render's free-plan worker on large scanned PDFs.
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
     });
 
     const matchData = aiResponse.data;
@@ -1416,10 +1435,18 @@ app.post("/api/ai-chat", isLoggedIn, catchAsync(async (req, res) => {
 
   const aiUrl = process.env.AI_SERVICE_URL || "http://127.0.0.1:8001";
 
+  // 60 s ceiling. Same cold-start arithmetic as the /curriculum proxy
+  // (Render wake + lazy model load on first embedding) but no OCR step,
+  // so the upper bound is shorter. AbortController is the standard
+  // pattern for fetch — fetch itself has no timeout option in Node.
+  const ctrl = new AbortController();
+  const tid = setTimeout(() => ctrl.abort(), 60000);
+
   try {
     const aiResponse = await fetch(`${aiUrl}/agent`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: ctrl.signal,
       body: JSON.stringify({
         message: message.trim(),
         session_id: session_id || null,
@@ -1441,9 +1468,19 @@ app.post("/api/ai-chat", isLoggedIn, catchAsync(async (req, res) => {
     return res.json(data);
   } catch (err) {
     console.error("AI chat proxy error:", err.message);
+    // Differentiate AbortController timeout from other failures so the
+    // frontend can show "wake-up in progress" instead of a generic error
+    // when the Python service is just cold-starting.
+    if (err.name === "AbortError") {
+      return res.status(504).json({
+        response: "The AI service is waking up — please send your message again in a few seconds.",
+      });
+    }
     return res.status(502).json({
       response: "Sorry, I couldn't reach the AI service. Try again in a moment.",
     });
+  } finally {
+    clearTimeout(tid);
   }
 }));
 
