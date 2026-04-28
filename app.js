@@ -199,6 +199,17 @@ app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
 app.use(express.urlencoded({ extended: true }));
+// JSON body parser. Without this, requests with `Content-Type:
+// application/json` (the chat widget POST /api/ai-chat, any other
+// future JSON-bodied API route) arrive at their handlers with
+// req.body = {}, which the chat route then mis-diagnoses as a
+// missing-message validation failure — the actual cause of the
+// pilot user-test "400 Bad Request" report.
+//
+// 1 MB limit is intentional: the only JSON bodies the app receives
+// are short chat messages and small admin payloads. File uploads
+// go through multer (multipart/form-data), not JSON.
+app.use(express.json({ limit: "1mb" }));
 app.use(methodOverride("_method"));
 app.use(express.static(path.join(__dirname, "public")));
 const FileStore = require("session-file-store")(session); //because req.user was undefined i installed session-file-store and added the store part in sessionConfig
