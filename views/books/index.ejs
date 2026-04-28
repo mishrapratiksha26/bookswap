@@ -233,7 +233,7 @@
 
   <select name="genre" class="filter-select">
     <option value="">All Genres</option>
-    <% const genres = ["ACTION AND ADVENTURE","AUTOBIOGRAPHY/BIOGRAPHY","SUSPENSE/THRILLERS","EDUCATIONAL","DETECTIVE AND MYSTERY","RELIGIOUS","HORROR","ROMANCE","FICTION","HISTORY"]; %>
+    <% const genres = ["ACTION AND ADVENTURE","AUTOBIOGRAPHY/BIOGRAPHY","SUSPENSE/THRILLERS","EDUCATIONAL","DETECTIVE AND MYSTERY","RELIGIOUS","HORROR","ROMANCE","FICTION","HISTORY","INSPIRATION/MOTIVATIONAL"]; %>
     <% genres.forEach(g => { %>
       <option value="<%= g %>" <%= (typeof filters !== 'undefined' && filters.genre === g) ? 'selected' : '' %>><%= g %></option>
     <% }) %>

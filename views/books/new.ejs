@@ -220,6 +220,7 @@
                     <option value="ROMANCE">Romance</option>
                     <option value="FICTION">Fiction</option>
                     <option value="HISTORY">History</option>
+                    <option value="INSPIRATION/MOTIVATIONAL">Inspiration/Motivational</option>
                 </select>
             </div>
 
@@ -612,6 +613,40 @@
         }
     }
 
+    // Map Google Books' free-text `categories` array onto our genre enum.
+    // Google returns labels like "Self-Help", "Biography & Autobiography",
+    // "Juvenile Fiction" — we normalise them to the closest BookSwap
+    // option. Returns the matching enum value or empty string for "no
+    // confident match" (in which case the user picks manually).
+    //
+    // Order matters: more-specific patterns first. INSPIRATION /
+    // MOTIVATIONAL is checked early because Google often tags Atomic
+    // Habits / The 7 Habits / Mindset / Grit etc. as "Self-Help" or
+    // "Psychology / Personal Growth" — both should map there.
+    const GENRE_MAP = [
+        // [regex over a single category string, our enum value]
+        [/self.?help|personal\s*growth|motivation|inspiration|self.?improvement/i, 'INSPIRATION/MOTIVATIONAL'],
+        [/biograph|autobiograph|memoir/i,                                          'AUTOBIOGRAPHY/BIOGRAPHY'],
+        [/thriller|suspense/i,                                                     'SUSPENSE/THRILLERS'],
+        [/mystery|detective|crime/i,                                               'DETECTIVE AND MYSTERY'],
+        [/horror|supernatural/i,                                                   'HORROR'],
+        [/romance/i,                                                               'ROMANCE'],
+        [/religion|spiritual|theolog/i,                                            'RELIGIOUS'],
+        [/history|historical/i,                                                    'HISTORY'],
+        [/computer|programming|engineering|mathematics|physics|chemistry|biology|textbook|education|study\s*guide|reference/i,
+                                                                                   'EDUCATIONAL'],
+        [/adventure|action/i,                                                      'ACTION AND ADVENTURE'],
+        [/fiction|fantasy|sci.?fi|science\s*fiction/i,                             'FICTION'],
+    ];
+    function inferGenre(categories) {
+        for (const cat of (categories || [])) {
+            for (const [re, value] of GENRE_MAP) {
+                if (re.test(cat)) return value;
+            }
+        }
+        return '';
+    }
+
     // Paste the chosen candidate into the CURRENTLY-VISIBLE form.
     // Both forms get the cover URL; description/year/title/author flow to
     // whichever form matches the field shape (physical vs pdf).
@@ -624,6 +659,20 @@
             document.getElementById('description').value = c.description || '';
             if (c.publication_year) document.getElementById('publication_year').value = c.publication_year;
             document.getElementById('physical-cover-url').value = c.cover_url || '';
+
+            // Auto-fill genre from Google Books `categories`. The user
+            // can still change it — this is a hint, not a lock-in.
+            const inferred = inferGenre(c.categories);
+            if (inferred) {
+                const sel = document.getElementById('inputGroupSelect01');
+                if (sel) {
+                    sel.value = inferred;
+                    // Fire the existing change handler so the
+                    // EDUCATIONAL course/department block toggles
+                    // visibility correctly when applicable.
+                    sel.dispatchEvent(new Event('change'));
+                }
+            }
         } else {
             document.getElementById('pdf-title').value       = c.title || '';
             document.getElementById('pdf-description').value = c.description || '';
