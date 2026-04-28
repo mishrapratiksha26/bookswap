@@ -1357,9 +1357,22 @@ app.post("/pdfs", isLoggedIn, uploadPdfMemory.single("pdf"), catchAsync(async (r
   const semesterNum = semester && !isNaN(parseInt(semester, 10)) ? parseInt(semester, 10) : null;
   const yearNum     = year     && !isNaN(parseInt(year, 10))     ? parseInt(year, 10)     : null;
 
+  // The Subject field was removed from the upload form after first
+  // user-test feedback ("no need of subject"). The course string
+  // already encodes that information ("MCC510 - Operating Systems"),
+  // so we derive subject from it when not supplied. Existing Python
+  // pipeline code that reads pdf.subject keeps working unchanged.
+  let derivedSubject = subject;
+  if (!derivedSubject && course) {
+    // Strip the leading "CODE - " prefix to get the course name only,
+    // which reads as a sensible "subject" when displayed on PDF cards.
+    const m = String(course).match(/^[A-Z]{2,5}\d{0,4}\s*[-–]\s*(.+)$/);
+    derivedSubject = (m && m[1].trim()) || course;
+  }
+
   const pdf = new Pdf({
     title,
-    subject,
+    subject: derivedSubject || "",
     course,
     department,
     professor,

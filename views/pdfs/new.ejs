@@ -9,10 +9,13 @@
       <input type="text" name="title" class="form-control" placeholder="e.g. Operating Systems — Silberschatz" required>
     </div>
 
-    <div class="mb-3">
-      <label class="form-label fw-semibold">Subject *</label>
-      <input type="text" name="subject" class="form-control" placeholder="e.g. Operating Systems" required>
-    </div>
+    <!-- Subject field removed after first user-test session. The Course
+         dropdown below already captures the subject (course name +
+         code), making a separate "Subject" field redundant data entry.
+         The Python pipeline still references pdf.subject; the schema
+         default of "" keeps existing code paths working, and the
+         POST /pdfs route now derives subject from the course name
+         when the form doesn't supply one. -->
 
     <!-- Department → Course cascade.
          Department choices are the canonical 17 IIT ISM departments.

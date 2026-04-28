@@ -3,7 +3,15 @@
 <div class="container mt-4">
   <div class="d-flex justify-content-between align-items-center mb-4">
     <h2>📚 Digital Library</h2>
-    <a href="/pdfs/new" class="btn btn-success">+ Upload PDF</a>
+    <%# Upload PDF button removed after first user-test feedback —
+        Swathi (P1, Mech) noted that having a separate "Upload PDF"
+        flow alongside "Post a Book" was confusing. The Post-a-Book
+        form's PDF/Digital toggle (views/books/new.ejs) is now the
+        single canonical entry point for both physical books and
+        digital resources. The /pdfs/new route remains in app.js so
+        old bookmarks still work, but the button is gone from the
+        navigation surface so new users only see one path. %>
+    <a href="/books/new" class="btn btn-success">+ Add a Resource</a>
   </div>
 
   <!-- Search & Filter Bar -->
@@ -46,7 +54,7 @@
   <!-- PDF Grid -->
   <% if (pdfs.length === 0) { %>
     <div class="alert alert-info">
-      No resources found. Be the first to <a href="/pdfs/new">upload one</a>!
+      No resources found. Be the first to <a href="/books/new">add one</a>!
     </div>
   <% } else { %>
     <div class="row row-cols-1 row-cols-md-3 g-4">

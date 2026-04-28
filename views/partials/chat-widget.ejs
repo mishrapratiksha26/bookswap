@@ -225,8 +225,24 @@
   // copy) still loads, so the user at least sees what they previously
   // discussed even if the agent has forgotten.
   // -----------------------------------------------------------------
-  const SESSION_KEY = 'bookswap_chat_session';
-  const HISTORY_KEY = 'bookswap_chat_history';
+  // Per-user namespacing on the localStorage keys. Without this, when a
+  // shared computer was used by user A then user B logged in, user B saw
+  // user A's chat history rehydrate into the panel — both a privacy
+  // problem and the cause of the "random msg I didn't type" bug from
+  // the first user-test session. The current user's id is rendered
+  // server-side via EJS so the keys are always pinned to the logged-in
+  // user (or the literal string "guest" when nobody is logged in).
+  const _CHAT_USER = '<%= currentUser ? currentUser._id : "guest" %>';
+  const SESSION_KEY = `bookswap_chat_session::${_CHAT_USER}`;
+  const HISTORY_KEY = `bookswap_chat_history::${_CHAT_USER}`;
+
+  // One-time housekeeping: clear the OLD non-namespaced keys from any
+  // browser that ran a previous build. Without this they'd just sit in
+  // localStorage forever taking up the user's quota.
+  try {
+    localStorage.removeItem('bookswap_chat_session');
+    localStorage.removeItem('bookswap_chat_history');
+  } catch (e) { /* private mode etc — ignore */ }
 
   function getSessionId() {
     let sid = localStorage.getItem(SESSION_KEY);
