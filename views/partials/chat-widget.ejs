@@ -355,7 +355,14 @@
     try {
       const res = await fetch(AGENT_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          // Explicit AJAX hint so isLoggedIn middleware returns a 401
+          // JSON instead of redirecting to /login (which the widget
+          // can't follow meaningfully).
+          'X-Requested-With': 'XMLHttpRequest',
+          'Accept': 'application/json',
+        },
         // session_id sends the same UUID on every request from this
         // browser. The Python /agent route looks it up in the
         // `conversations` collection (TTL 30 min), loads prior turns,
@@ -364,6 +371,20 @@
         // is a fresh conversation and the bot "forgets" instantly.
         body: JSON.stringify({ message: text, session_id: getSessionId() })
       });
+
+      // Handle the auth-failure case explicitly so the user sees what
+      // to actually do, instead of the generic catch-block message.
+      if (res.status === 401) {
+        thinking.remove();
+        const loginMsg = document.createElement('div');
+        loginMsg.className = 'chat-msg bot';
+        loginMsg.innerHTML = 'Please <a href="/login">log in</a> to chat with the AI.';
+        messages.appendChild(loginMsg);
+        input.disabled = false;
+        sendBtn.disabled = false;
+        return;
+      }
+
       const data = await res.json();
 
       thinking.remove();
