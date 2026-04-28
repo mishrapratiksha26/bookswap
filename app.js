@@ -936,7 +936,19 @@ app.get("/api/book-metadata", catchAsync(async (req, res) => {
     let q = `intitle:${title.trim()}`;
     if (author && author.trim()) q += `+inauthor:${author.trim()}`;
 
-    const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=5`;
+    // Append the API key when one is configured. Without a key, Google
+    // Books rate-limits unauthenticated requests at ~1,000/day per IP —
+    // and since Render's outbound IPs are shared with other tenants who
+    // also hit Google Books, the limit is effectively much lower in
+    // practice and 429s start hitting after a handful of upload attempts.
+    // With a key the quota jumps to 100,000+ requests/day per project,
+    // scoped to our own account. The key is free (no card required) and
+    // is set as GOOGLE_BOOKS_API_KEY in Render's env vars.
+    let url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=5`;
+    const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
+    if (apiKey) {
+        url += `&key=${encodeURIComponent(apiKey)}`;
+    }
 
     try {
         // Bumped from 6 s to 15 s — on Render free plan, cold first-call
@@ -974,6 +986,17 @@ app.get("/api/book-metadata", catchAsync(async (req, res) => {
 
         return res.json({ found: true, candidates });
     } catch (err) {
+        // Surface rate-limit (429/403) distinctly so the frontend can
+        // show a helpful "API key not configured" message instead of a
+        // generic "service unavailable" — saves the next debugger from
+        // chasing a non-issue.
+        const upstreamStatus = err.response && err.response.status;
+        if (upstreamStatus === 429 || upstreamStatus === 403) {
+            console.warn("Google Books rate-limited:", upstreamStatus, "- set GOOGLE_BOOKS_API_KEY env var");
+            return res.status(503).json({
+                error: "Google Books rate limit reached. Set GOOGLE_BOOKS_API_KEY to authenticate requests."
+            });
+        }
         console.log("Google Books proxy failed:", err.message);
         return res.status(502).json({ error: "metadata service unavailable" });
     }
