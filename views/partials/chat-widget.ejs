@@ -81,11 +81,11 @@
   }
 
   .chat-msg {
-    max-width: 85%;
-    padding: 10px 14px;
+    max-width: 90%;
+    padding: 12px 16px;
     border-radius: 12px;
     font-size: 14px;
-    line-height: 1.5;
+    line-height: 1.6;
     word-wrap: break-word;
   }
   .chat-msg.user {
@@ -100,6 +100,51 @@
     color: #333;
     border: 1px solid #e5e7eb;
     border-bottom-left-radius: 4px;
+  }
+
+  /* Structural styling INSIDE the bot bubble — pilot tester noted the
+     dual-section response (physical + PDF) read as a wall of text.
+     formatResponse() now wraps every line into a <p>, makes each
+     entry a card-style block, and emphasises the 📗 / 📄 prefix
+     lines so the reader's eye latches on. */
+  .chat-msg.bot p {
+    margin: 0 0 8px 0;
+  }
+  .chat-msg.bot p:last-child {
+    margin-bottom: 0;
+  }
+  .chat-msg.bot strong {
+    color: #15803d;
+    font-weight: 600;
+  }
+  .chat-msg.bot .chat-section-heading {
+    /* Lines starting with 📗 / 📄 → standalone heading rows */
+    display: block;
+    margin: 12px 0 6px 0;
+    font-weight: 600;
+    color: #1f2937;
+    font-size: 14px;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 4px;
+  }
+  .chat-msg.bot .chat-section-heading:first-child {
+    margin-top: 0;
+  }
+  .chat-msg.bot .chat-book-line {
+    /* A single book entry (line starting with ✅ ❌ 📗 📄 within prose) */
+    display: block;
+    padding: 6px 0;
+    border-bottom: 1px dashed #f3f4f6;
+  }
+  .chat-msg.bot .chat-book-line:last-of-type {
+    border-bottom: none;
+  }
+  .chat-msg.bot a {
+    color: #198754;
+    text-decoration: none;
+  }
+  .chat-msg.bot a:hover {
+    text-decoration: underline;
   }
 
   .chat-thinking {
@@ -408,11 +453,61 @@
     messages.scrollTop = messages.scrollHeight;
   }
 
+  // Convert the agent's plain-text response into structured HTML so
+  // the dual-section dual-inventory output (📗 physical + 📄 pdf)
+  // doesn't read as a wall of text. Heuristics:
+  //   - lines starting with 📗 or 📄 ALONE (no other content) become
+  //     section headings
+  //   - lines starting with ✅ ❌ 📗 📄 followed by a book title become
+  //     individual book-line blocks
+  //   - blank lines split paragraphs
+  //   - **bold** stays bold
+  //   - inline links keep working
   function formatResponse(text) {
     if (!text) return 'No response received.';
-    // Convert newlines to <br>, bold text between ** **
-    return text
-      .replace(/\n/g, '<br>')
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    // Escape any raw HTML in the input first to avoid injection from
+    // a model that happened to emit < or > characters.
+    const escape = s => s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+
+    // Turn **bold** -> <strong> after escape so the asterisks survive.
+    const applyBold = s => s.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    // Detect a "section heading" line — short, starts with 📗 or 📄,
+    // and the rest is a label (no colon-separated entry).
+    const HEADING_RE = /^[📗📄][^:]*$/;
+    // Detect a "book entry" line — starts with one of the inventory icons
+    // and contains a title; broader than the heading match.
+    const ENTRY_RE = /^(✅|❌|📗|📄)/;
+
+    const blocks = text.split(/\n{2,}/);   // paragraphs separated by blank lines
+    const html = blocks.map(block => {
+      const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+      if (lines.length === 0) return '';
+
+      // If a block is mostly book entries, render each line as a card.
+      const entryCount = lines.filter(l => ENTRY_RE.test(l)).length;
+      if (entryCount >= 2 && entryCount >= lines.length / 2) {
+        return lines.map(l => {
+          const escaped = applyBold(escape(l));
+          if (HEADING_RE.test(l) && l.length < 60) {
+            return `<span class="chat-section-heading">${escaped}</span>`;
+          }
+          if (ENTRY_RE.test(l)) {
+            return `<span class="chat-book-line">${escaped}</span>`;
+          }
+          return `<p>${escaped}</p>`;
+        }).join('');
+      }
+
+      // Otherwise just a regular paragraph (greeting, follow-up question, etc.).
+      const inner = lines.map(l => applyBold(escape(l))).join('<br>');
+      return `<p>${inner}</p>`;
+    }).join('');
+
+    return html;
   }
 </script>
