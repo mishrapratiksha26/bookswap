@@ -30,6 +30,21 @@
                             </div>
                         </div>
 
+                        <%# Department dropdown — populated from the canonical
+                             IIT ISM department list passed in by GET /register.
+                             Used by the chat agent's taste-vector cold-start
+                             logic and by future per-department analytics. %>
+                        <div class="mb-3">
+                            <label class="form-label" for="department">Department</label>
+                            <select class="form-select" id="department" name="department" required>
+                                <option value="" disabled selected>Pick your department…</option>
+                                <% (typeof departments !== 'undefined' ? departments : []).forEach(d => { %>
+                                    <option value="<%= d.code %>"><%= d.code %> — <%= d.name %></option>
+                                <% }); %>
+                            </select>
+                            <div class="form-text">Used to personalise book recommendations.</div>
+                        </div>
+
                         <button class="btn btn-success btn-block">Register</button>
                     </form>
 

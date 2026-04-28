@@ -315,15 +315,12 @@
                 <textarea class="form-control" type="text" id="description" name="book[description]" rows="5" required></textarea>
             </div>
 
-            <div class="mb-3">
-                <label class="form-label" for="price">Lending Price:</label>
-                <div class="input-group">
-                    <span class="input-group-text" id="price-label">&#x20b9;</span>
-                    <input type="text" class="form-control" placeholder="0" id="price"
-                           aria-label="price" aria-describedby="price-label" name="book[price]" required>
-                </div>
-                <div class="help-text">Set your own lending price. Google Books can't auto-fill this for academic books.</div>
-            </div>
+            <%# Lending price field removed — second user-test session
+                 confirmed BookSwap is positioned as a free peer-to-peer
+                 lending platform, not a marketplace. The Mongoose
+                 schema kept `price` as a backward-compatible field
+                 with default 0 so older book documents render fine. %>
+            <input type="hidden" name="book[price]" value="0">
 
             <div class="mb-3">
                 <button class="bs-btn bs-btn--primary">Post book</button>

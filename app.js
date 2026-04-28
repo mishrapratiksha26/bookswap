@@ -426,13 +426,18 @@ app.get("/books", catchAsync(async (req, res) => {
 }));
 
 app.get("/register", (req, res) => {
-  res.render("users/register");
+  // Pass the canonical IIT ISM department list so the register form
+  // can offer a closed dropdown rather than a free-text input.
+  // Keeps user.department values normalised to the 17 catalogue codes
+  // used everywhere else (book uploads, PDF filter, recommendation
+  // department-init in get_user_profile).
+  res.render("users/register", { departments: IITISM_DEPARTMENTS });
 });
 
 app.post("/register", async (req, res, next) => {
   try {
-    const { email, username, password } = req.body;
-    const user = new User({ email, username });
+    const { email, username, password, department } = req.body;
+    const user = new User({ email, username, department: department || "" });
     const registeredUser = await User.register(user, password);
     console.log(registeredUser);
 

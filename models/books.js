@@ -31,9 +31,16 @@ const BookSchema = new Schema({
       type:String,
       required:true,
    },
+   // Price is no longer collected on the upload form — BookSwap is
+   // a free peer-to-peer lending platform, not a marketplace. Field
+   // kept on the schema with default 0 so existing book documents
+   // (and any code path that still reads book.price) continue to
+   // work without migration. The Razorpay flow in /payment is
+   // currently dead code; if it's ever revived for, e.g. lost-book
+   // fines, this default is the right starting value.
    price:{
       type:Number,
-      required:true
+      default:0,
    },
    owner:{
       type:Schema.Types.ObjectId,
