@@ -332,7 +332,7 @@
              FORM B — PDF / digital resource (posts to /pdfs, flat keys)
              Shown only when the user toggles to "PDF / digital" at top.
              Different field shape than Form A because the Pdf model has
-             different required fields (no price, has subject + professor +
+             different required fields (no price, has professor +
              file upload). Keeping two forms avoids JS name-rewriting on
              submit, which is a common source of form bugs.
              ═══════════════════════════════════════════════════════════════ -->
@@ -348,11 +348,15 @@
                 <input class="form-control" type="text" id="pdf-title" name="title" required>
             </div>
 
-            <div class="mb-3">
-                <label class="form-label" for="pdf-subject">Subject:</label>
-                <input class="form-control" type="text" id="pdf-subject" name="subject"
-                       placeholder="e.g. Operating Systems, Linear Algebra" required>
-            </div>
+            <%# Subject field removed — pilot user-test feedback ("no
+                 need of subject in it"). The Course dropdown below
+                 already encodes the same information ("MCC510 -
+                 Operating Systems") and POST /pdfs derives the subject
+                 string from the course when not supplied, keeping the
+                 downstream pipeline (chapter extractor, search, recs)
+                 working unchanged. Same fix applied earlier to the
+                 standalone /pdfs/new form (which is now also reachable
+                 from this unified upload page via the PDF tab). %>
 
             <div class="row mb-3">
                 <div class="col">
