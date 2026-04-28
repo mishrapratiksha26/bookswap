@@ -21,7 +21,22 @@
       </select>
     </div>
     <div class="col-md-3">
-      <input type="text" name="dept" class="form-control" placeholder="Department (e.g. CSE)" value="<%= query.dept || '' %>">
+      <%
+        // Department dropdown populated from the canonical IIT ISM
+        // catalogue (passed in from app.js GET /pdfs). The route still
+        // accepts free-text via the regex match in the filter, so an
+        // older saved bookmark with ?dept=CSE still works — but the UI
+        // exposes only the closed list to users.
+        const deptList = (typeof departments !== 'undefined') ? departments : [];
+      %>
+      <select name="dept" class="form-select">
+        <option value="">All departments</option>
+        <% deptList.forEach(d => { %>
+          <option value="<%= d.code %>" <%= query.dept === d.code ? 'selected' : '' %>>
+            <%= d.code %> — <%= d.name %>
+          </option>
+        <% }); %>
+      </select>
     </div>
     <div class="col-md-2">
       <button type="submit" class="btn btn-primary w-100">Search</button>

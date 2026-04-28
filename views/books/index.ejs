@@ -242,27 +242,94 @@
   <input type="text" name="author" class="filter-input" placeholder="Author..."
          value="<%= (typeof filters !== 'undefined' && filters.author) || '' %>">
 
-  <input type="text" name="department" class="filter-input" list="filter-dept-list"
-         placeholder="Department..."
-         value="<%= (typeof filters !== 'undefined' && filters.department) || '' %>">
-  <datalist id="filter-dept-list">
-    <% if (typeof distinctDepartments !== 'undefined') { %>
-      <% distinctDepartments.forEach(d => { %>
-        <option value="<%= d %>"></option>
-      <% }) %>
-    <% } %>
-  </datalist>
+  <%
+    // Department + course filters: closed dropdowns sourced from the
+    // canonical IIT ISM catalogue (passed in from app.js GET /books).
+    // The course dropdown cascades: it stays disabled until a department
+    // is picked, then a JS handler fetches /api/courses?dept=<code> and
+    // populates it with `code — name`. This is the same pattern used by
+    // the upload form (views/books/new.ejs) so user mental model is
+    // consistent across surfaces.
+    const filterDeptList   = (typeof filterDepartments !== 'undefined') ? filterDepartments : [];
+    const currentDeptValue = (typeof filters !== 'undefined' && filters.department) || '';
+    const currentCourseValue = (typeof filters !== 'undefined' && filters.course) || '';
+  %>
 
-  <input type="text" name="course" class="filter-input" list="filter-course-list"
-         placeholder="Course code..."
-         value="<%= (typeof filters !== 'undefined' && filters.course) || '' %>">
-  <datalist id="filter-course-list">
-    <% if (typeof distinctCourses !== 'undefined') { %>
-      <% distinctCourses.forEach(c => { %>
-        <option value="<%= c %>"></option>
-      <% }) %>
+  <select name="department" class="filter-select" id="filter-dept-select">
+    <option value="">All departments</option>
+    <% filterDeptList.forEach(d => { %>
+      <option value="<%= d.code %>" <%= currentDeptValue === d.code ? 'selected' : '' %>>
+        <%= d.code %> — <%= d.name %>
+      </option>
+    <% }); %>
+  </select>
+
+  <select name="course" class="filter-select" id="filter-course-select" <%= currentDeptValue ? '' : 'disabled' %>>
+    <option value="">All courses</option>
+    <% if (currentCourseValue) { %>
+      <option value="<%= currentCourseValue %>" selected><%= currentCourseValue %></option>
     <% } %>
-  </datalist>
+  </select>
+
+  <script>
+    // Cascading dept→course dropdown. On dept change, fetch courses for
+    // that department and replace the course-select options. We cache
+    // by dept code so re-picking the same department doesn't re-fetch.
+    (function () {
+      const deptSel   = document.getElementById('filter-dept-select');
+      const courseSel = document.getElementById('filter-course-select');
+      if (!deptSel || !courseSel) return;
+
+      const cache = {};
+      const initialCourse = <%- JSON.stringify(currentCourseValue) %>;
+
+      async function loadCourses(deptCode, preselect) {
+        if (!deptCode) {
+          courseSel.innerHTML = '<option value="">All courses</option>';
+          courseSel.disabled = true;
+          return;
+        }
+        courseSel.disabled = true;
+        courseSel.innerHTML = '<option value="">Loading…</option>';
+
+        let courses = cache[deptCode];
+        if (!courses) {
+          try {
+            const r = await fetch(`/api/courses?dept=${encodeURIComponent(deptCode)}`);
+            if (!r.ok) throw new Error('fetch failed');
+            const d = await r.json();
+            courses = d.courses || [];
+            cache[deptCode] = courses;
+          } catch (e) {
+            courseSel.innerHTML = '<option value="">Could not load courses</option>';
+            courseSel.disabled = false;
+            return;
+          }
+        }
+
+        // Build options. The value matches the upload form's storage
+        // shape ("CODE - Name") so an existing book's course filter
+        // round-trips correctly.
+        const opts = ['<option value="">All courses</option>'];
+        courses.forEach(c => {
+          const value = `${c.code} - ${c.name}`;
+          const label = `${c.code} — ${c.name}`;
+          const sel = (preselect === value || preselect === c.code) ? ' selected' : '';
+          opts.push(`<option value="${value}"${sel}>${label}</option>`);
+        });
+        courseSel.innerHTML = opts.join('');
+        courseSel.disabled = false;
+      }
+
+      // Initial load if a dept is already selected (page reloaded with a
+      // ?department=… in the URL).
+      if (deptSel.value) loadCourses(deptSel.value, initialCourse);
+
+      deptSel.addEventListener('change', () => {
+        loadCourses(deptSel.value, '');   // clear course when dept changes
+      });
+    })();
+  </script>
 
   <input type="number" name="year" class="filter-input" style="width: 100px;"
          placeholder="Year"

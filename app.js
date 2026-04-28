@@ -77,7 +77,101 @@ const pdfStorage = new CloudinaryStorage({
     allowedFormats: ["pdf"],
   },
 });
+// `uploadPdf` is the legacy direct-to-Cloudinary multer instance, used by
+// /curriculum (lecture plans are tiny — Cloudinary 10 MB cap is never
+// hit). Book PDFs go through `uploadPdfMemory` below so we can run them
+// through Python compression before Cloudinary sees them.
 const uploadPdf = multer({ storage: pdfStorage });
+
+// In-memory multer for the book-upload pipeline. We need the raw bytes
+// in Node so we can (a) measure size, (b) optionally bounce to Python
+// for lossless compression, (c) push to Cloudinary via SDK. Cloudinary's
+// free plan rejects >10 MB raw uploads; without this interception the
+// user gets a Cloudinary error instead of a smooth save.
+//
+// 50 MB ceiling on the *upload* (before compression). Real textbooks
+// rarely exceed this; if they do, the user gets multer's clean
+// "file too large" error instead of a more confusing downstream failure.
+const uploadPdfMemory = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
+});
+
+// Helper: ensure a PDF buffer fits Cloudinary's 10 MB raw-upload cap.
+// Calls the Python /compress-pdf endpoint when the buffer is over the
+// soft limit (9.5 MB — leaves headroom for Cloudinary's own metadata
+// overhead). Returns the (possibly smaller) buffer. Throws an Error
+// with a user-friendly message when even lossless compression is
+// insufficient — the caller should surface that message via flash().
+async function ensurePdfFitsCloudinary(buffer, originalName) {
+  const SOFT_LIMIT = 9.5 * 1024 * 1024;
+  if (buffer.length <= SOFT_LIMIT) return buffer;
+
+  const aiUrl = process.env.AI_SERVICE_URL || "http://127.0.0.1:8001";
+  const formData = new FormData();
+  formData.append("file", buffer, {
+    filename: originalName || "book.pdf",
+    contentType: "application/pdf",
+  });
+
+  try {
+    const resp = await axios.post(`${aiUrl}/compress-pdf`, formData, {
+      headers: formData.getHeaders(),
+      timeout: 60000,            // textbook compression can take 20-30 s
+      responseType: "arraybuffer",
+      // We want a non-2xx (e.g. 413 "still too big") to throw so the
+      // catch block can extract the JSON error payload and surface it
+      // to the user. axios's default behaviour suits us here.
+    });
+    return Buffer.from(resp.data);
+  } catch (err) {
+    // 413 from Python = lossless wasn't enough. The response body has
+    // a JSON payload we can show the user verbatim.
+    if (err.response && err.response.status === 413) {
+      let payload;
+      try {
+        payload = JSON.parse(Buffer.from(err.response.data).toString("utf8"));
+      } catch {
+        payload = {};
+      }
+      const msg = payload.suggestion ||
+        "PDF is too large even after compression. Please use a desktop tool to reduce file size.";
+      const e = new Error(msg);
+      e.userFacing = true;
+      throw e;
+    }
+    // Anything else — Python down, network timeout, etc. — log and let
+    // the original buffer through. Cloudinary will then reject if the
+    // file is over 10 MB, but at least we're not blocking on a flaky
+    // service for the common <10 MB case.
+    console.warn("PDF compression service failed, falling through:", err.message);
+    return buffer;
+  }
+}
+
+// Helper: upload a PDF buffer to Cloudinary via the SDK. Mirrors the
+// shape `multer-storage-cloudinary` would have produced (`path` and
+// `filename`) so existing code paths that read those fields continue
+// to work without modification.
+function uploadBufferToCloudinary(buffer, folder, originalname) {
+  const { cloudinary } = require("./cloudinary");
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder,
+        resource_type: "raw",
+        // public_id can't have spaces or non-ASCII; sanitise the
+        // original filename and prefix with timestamp for uniqueness.
+        public_id: `${Date.now()}_${(originalname || "pdf")
+          .replace(/\.pdf$/i, "")
+          .replace(/[^a-zA-Z0-9_-]/g, "_")
+          .slice(0, 100)}`,
+      },
+      (err, result) => (err ? reject(err) : resolve(result)),
+    );
+    stream.end(buffer);
+  });
+}
 
 const http = require("http");
 const { Server } = require("socket.io");
@@ -310,7 +404,12 @@ app.get("/books", catchAsync(async (req, res) => {
     res.render("books/index", {
         clusters, searchResults, query: query || "", personalRecommendations,
         filters: { genre, author, department, course, year, min_rating, available, sort },
+        // distinct* are kept for any code paths still using the old
+        // datalist autocomplete; the new cascading dropdown sources its
+        // department list from filterDepartments (canonical IIT ISM list)
+        // and its course list from /api/courses?dept=<code> at runtime.
         distinctCourses, distinctDepartments,
+        filterDepartments: IITISM_DEPARTMENTS,
         wishlistedIds
     });
 }));
@@ -840,7 +939,11 @@ app.get("/api/book-metadata", catchAsync(async (req, res) => {
     const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=5`;
 
     try {
-        const resp = await axios.get(url, { timeout: 6000 });
+        // Bumped from 6 s to 15 s — on Render free plan, cold first-call
+        // out to googleapis.com routes through Cloudflare and routinely
+        // takes 7-10 s before the connection settles. The 6 s ceiling
+        // produced spurious 502s on the new-book form's auto-fill.
+        const resp = await axios.get(url, { timeout: 15000 });
         const items = resp.data.items || [];
         if (items.length === 0) {
             return res.json({ found: false });
@@ -1156,7 +1259,15 @@ app.get("/pdfs", catchAsync(async (req, res) => {
   if (q) filter.$text = { $search: q };
 
   const pdfs = await Pdf.find(filter).sort({ created_at: -1 }).limit(50);
-  res.render("pdfs/index", { pdfs, query: req.query });
+  // Pass the canonical IIT ISM department list so the filter UI can render
+  // a dropdown instead of a free-text input. Free text was producing zero-
+  // result queries from typos ("ECE" vs "Electronics" vs "Electronic Eng")
+  // — a closed list eliminates that whole class of failure.
+  res.render("pdfs/index", {
+    pdfs,
+    query: req.query,
+    departments: IITISM_DEPARTMENTS,
+  });
 }));
 
 // GET /pdfs/new — upload form.
@@ -1168,7 +1279,24 @@ app.get("/pdfs/new", isLoggedIn, (req, res) => {
 });
 
 // POST /pdfs — upload a new PDF
-app.post("/pdfs", isLoggedIn, uploadPdf.single("pdf"), catchAsync(async (req, res) => {
+//
+// Pipeline (replaces the old multer-storage-cloudinary direct upload):
+//   1. multer stores the upload in memory (uploadPdfMemory)
+//   2. ensurePdfFitsCloudinary() bounces the buffer to Python's
+//      /compress-pdf if size > 9.5 MB; lossless deflate keeps text
+//      extractable for the curriculum matcher.
+//   3. uploadBufferToCloudinary() pushes the (possibly-compressed)
+//      buffer to Cloudinary via the SDK and returns a result with
+//      `secure_url` and `public_id` mirroring the old multer fields.
+//   4. Pdf doc is saved with the URL + public_id from step 3.
+//   5. /embed-pdf is fired async to generate the vector + chapters.
+//
+// User-facing behaviour: a 25 MB textbook upload that previously
+// failed against Cloudinary's 10 MB cap now silently compresses and
+// succeeds. A 60 MB scan that even compression can't shrink fails
+// with a friendly "use a desktop tool to compress further" message
+// instead of an opaque Cloudinary error.
+app.post("/pdfs", isLoggedIn, uploadPdfMemory.single("pdf"), catchAsync(async (req, res) => {
   const {
     title, subject, course, department, professor, resource_type, description,
     // Resource-type-specific extras. Form submits empty strings for fields
@@ -1182,6 +1310,22 @@ app.post("/pdfs", isLoggedIn, uploadPdf.single("pdf"), catchAsync(async (req, re
 
   if (!req.file) {
     req.flash("error", "Please select a PDF file to upload.");
+    return res.redirect("/pdfs/new");
+  }
+
+  // --- Compression + Cloudinary upload ---------------------------------
+  let cloudinaryResult;
+  try {
+    const finalBuffer = await ensurePdfFitsCloudinary(req.file.buffer, req.file.originalname);
+    cloudinaryResult = await uploadBufferToCloudinary(finalBuffer, "bookswap_pdfs", req.file.originalname);
+  } catch (err) {
+    // userFacing flag = compression failed AND user can act on the message.
+    // Anything else is a server bug — don't leak the raw error.
+    const msg = err.userFacing
+      ? err.message
+      : "Could not upload PDF. Please try again or use a smaller file.";
+    console.error("PDF upload pipeline error:", err.message);
+    req.flash("error", msg);
     return res.redirect("/pdfs/new");
   }
 
@@ -1202,8 +1346,8 @@ app.post("/pdfs", isLoggedIn, uploadPdf.single("pdf"), catchAsync(async (req, re
     exam_type: exam_type || "",
     year:      yearNum,
     description,
-    cloudinary_url: req.file.path,
-    cloudinary_public_id: req.file.filename,
+    cloudinary_url: cloudinaryResult.secure_url,
+    cloudinary_public_id: cloudinaryResult.public_id,
     cover_url: cover_url || "",
     uploadedBy: req.user._id
   });
