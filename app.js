@@ -94,7 +94,14 @@ const uploadPdf = multer({ storage: pdfStorage });
 // "file too large" error instead of a more confusing downstream failure.
 const uploadPdfMemory = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 },
+  // 100 MB ceiling. Scanned textbooks at IIT ISM commonly run 50-80 MB
+  // (the wastewater-engineering test case was 67 MB), and the Python
+  // /compress-pdf endpoint now does a lossy fallback for scan-only
+  // PDFs that lossless can't shrink below Cloudinary's 10 MB cap.
+  // Multer's job here is just to keep memory pressure bounded;
+  // anything bigger than 100 MB likely IS too large to deliver
+  // sensibly even after compression.
+  limits: { fileSize: 100 * 1024 * 1024 },
 });
 
 // Helper: ensure a PDF buffer fits Cloudinary's 10 MB raw-upload cap.
