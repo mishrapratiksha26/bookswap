@@ -273,6 +273,77 @@
               </div>
             <% } %>
 
+            <!-- Alternate professor-recommended books for this unit.       -->
+            <!-- When multiple of the lecture plan's textbooks are in our   -->
+            <!-- inventory, the matcher returns chapter+page lookups for    -->
+            <!-- each.  The student picks where to read from rather than    -->
+            <!-- the system collapsing to a single "best" book.             -->
+            <% if (unit.book_options && unit.book_options.length > 1) { %>
+              <div class="mt-3 pt-3 border-top">
+                <small class="text-muted d-block mb-2">
+                  Other recommended books for this unit — pick whichever you'd like to read from:
+                </small>
+                <% unit.book_options.slice(1).forEach(opt => { %>
+                  <div class="ps-3 mb-3 border-start border-3 border-secondary">
+                    <div>
+                      <strong>📘 <%= opt.book_title %></strong>
+                      <% if (opt.book_author) { %>
+                        <span class="text-muted">— <%= opt.book_author %></span>
+                      <% } %>
+                      <% if (opt.source === 'professor_recommended') { %>
+                        <span class="badge bg-success ms-2">🎓 Professor-recommended</span>
+                      <% } %>
+                    </div>
+                    <% if (opt.suggested_chapter) { %>
+                      <div class="mt-1">
+                        <small><strong>Chapter:</strong> <%= opt.suggested_chapter %></small>
+                        <% if (opt.chapter_source === 'pdf' && opt.chapter_page) { %>
+                          <span class="badge bg-success ms-1">📍 p. <%= opt.chapter_page %></span>
+                        <% } else if (opt.chapter_source === 'pdf') { %>
+                          <span class="badge bg-primary ms-1">From PDF index</span>
+                        <% } else if (opt.chapter_source === 'physical') { %>
+                          <span class="badge bg-warning text-dark ms-1">Title only</span>
+                        <% } else if (opt.chapter_source === 'ai_guess') { %>
+                          <span class="badge bg-warning text-dark ms-1">
+                            🤖 AI-estimated (<%= opt.chapter_confidence || 'low' %>)
+                          </span>
+                        <% } %>
+                      </div>
+                    <% } %>
+                    <% if (opt.formats_available && opt.formats_available.length > 0) { %>
+                      <div class="mt-2">
+                        <% opt.formats_available.forEach(fmt => { %>
+                          <% if (fmt.type === 'physical') { %>
+                            <a href="/books/<%= fmt.book_id %>"
+                               class="btn btn-sm <%= fmt.available ? 'btn-outline-success' : 'btn-outline-secondary' %> me-2 mb-1">
+                              📗 Borrow
+                              <% if (fmt.available) { %>
+                                <span class="badge bg-success ms-1">Available</span>
+                              <% } else { %>
+                                <span class="badge bg-secondary ms-1">Borrowed</span>
+                              <% } %>
+                            </a>
+                          <% } else if (fmt.type === 'pdf') { %>
+                            <%
+                              const altPageAccurate =
+                                opt.chapter_source === 'pdf' && opt.chapter_page;
+                            %>
+                            <a href="/pdfs/<%= fmt.pdf_id %>"
+                               class="btn btn-sm btn-outline-primary me-2 mb-1">
+                              📄 Open PDF
+                              <% if (altPageAccurate) { %>
+                                <span class="badge bg-primary ms-1">p. <%= opt.chapter_page %></span>
+                              <% } %>
+                            </a>
+                          <% } %>
+                        <% }) %>
+                      </div>
+                    <% } %>
+                  </div>
+                <% }) %>
+              </div>
+            <% } %>
+
           </div>
         </div>
       <% }) %>

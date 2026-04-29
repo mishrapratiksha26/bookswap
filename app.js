@@ -308,7 +308,47 @@ app.get("/books", catchAsync(async (req, res) => {
             body: JSON.stringify({ query, top_k: 5 })
         });
         const data = await response.json();
-        searchResults = data.results;
+        searchResults = data.results || [];
+
+        // Genre-keyword fallback. The cosine path returns empty when the
+        // query is a short vague genre name ("inspirational books",
+        // "thrillers", "horror") because Sentence-BERT cosine on a
+        // 384-dim embedding doesn't strongly correlate the genre word
+        // with the books' embedded text — even when those books exist
+        // in the inventory tagged with that exact genre. User testing
+        // with Shweta surfaced this on "inspirational books" returning
+        // empty despite Atomic Habits being in the DB and tagged
+        // INSPIRATION/MOTIVATIONAL. The structured fallback below pulls
+        // books by genre tag whenever the query contains a known genre
+        // keyword AND cosine returned fewer than 3 hits, then merges +
+        // de-dups so cosine results stay first.
+        const Q = query.toLowerCase();
+        const GENRE_KEYWORDS = [
+            [/(?:^|\b)(?:inspir\w*|motivat\w*|self.?help|self.?improvement|personal\s*growth)/, "INSPIRATION/MOTIVATIONAL"],
+            [/(?:^|\b)(?:thrill\w*|suspense)/,                                                  "SUSPENSE/THRILLERS"],
+            [/(?:^|\b)(?:detective|mystery)/,                                                   "DETECTIVE AND MYSTERY"],
+            [/(?:^|\b)(?:horror|scary)/,                                                        "HORROR"],
+            [/(?:^|\b)(?:romance|romantic|love\s*stor\w*)/,                                     "ROMANCE"],
+            [/(?:^|\b)(?:adventure|action)/,                                                    "ACTION AND ADVENTURE"],
+            [/(?:^|\b)(?:autobiograph\w*|biograph\w*|memoir)/,                                  "AUTOBIOGRAPHY/BIOGRAPHY"],
+            [/(?:^|\b)(?:religion|religious|spiritual)/,                                        "RELIGIOUS"],
+            [/(?:^|\b)(?:history|historical)/,                                                  "HISTORY"],
+            [/(?:^|\b)(?:fiction|novel|fantasy|sci.?fi)/,                                       "FICTION"],
+            [/(?:^|\b)(?:textbook|educational|academic|study)/,                                 "EDUCATIONAL"],
+        ];
+        const matchedGenre = (GENRE_KEYWORDS.find(([rx]) => rx.test(Q)) || [])[1];
+        if (matchedGenre && searchResults.length < 3) {
+            const genreHits = await Book.find({ genre: matchedGenre })
+                .sort({ avg_rating: -1, _id: -1 })
+                .limit(5)
+                .lean();
+            const seen = new Set(searchResults.map(b => String(b._id)));
+            for (const b of genreHits) {
+                if (seen.has(String(b._id))) continue;
+                searchResults.push(b);
+                if (searchResults.length >= 5) break;
+            }
+        }
     }
 
     if (req.user) {
@@ -1027,17 +1067,35 @@ app.get("/api/book-metadata", catchAsync(async (req, res) => {
                 // Drop the page-curl shadow effect that Google overlays on
                 // thumbnails (looks dated; obscures detail).
                 cover = cover.replace(/&edge=curl/g, "");
-                // Bump zoom up so when only thumbnail/smallThumbnail were
-                // returned, we still pull the higher-res underlying image.
-                // Google's books image proxy honours this query param.
+                // zoom=5 returns Google's largest reliably-served version
+                // (~700px wide). zoom=2 was visibly blurry on the show
+                // page after Shweta's user-test session; zoom=5 is the
+                // documented "use the source image at higher resolution"
+                // value. zoom=0 / zoom=6 occasionally return 0-byte
+                // responses on the books-images proxy, so we don't push
+                // it any higher.
                 if (/[?&]zoom=\d+/.test(cover)) {
-                    cover = cover.replace(/([?&])zoom=\d+/, "$1zoom=2");
+                    cover = cover.replace(/([?&])zoom=\d+/, "$1zoom=5");
                 } else if (cover.includes("?")) {
-                    cover = cover + "&zoom=2";
+                    cover = cover + "&zoom=5";
                 } else {
-                    cover = cover + "?zoom=2";
+                    cover = cover + "?zoom=5";
                 }
             }
+
+            // OpenLibrary cover fallback. Google Books only returns a
+            // cover for ~70% of titles; for the rest (especially older
+            // textbooks and Indian-imprint editions) the candidate has
+            // no imageLinks at all and the upload form would render a
+            // blank cover. OpenLibrary's covers-by-ISBN API is free, no
+            // key required, and serves a 600×900 jacket for almost
+            // every ISBN that has a print edition. We ONLY fall back
+            // when Google had nothing — Google's covers are usually
+            // higher fidelity when present.
+            if (!cover && isbn) {
+                cover = `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn.identifier)}-L.jpg`;
+            }
+
             return {
                 title:            v.title || "",
                 authors:          v.authors || [],
@@ -1398,9 +1456,18 @@ app.post("/pdfs", isLoggedIn, uploadPdfMemory.single("pdf"), catchAsync(async (r
     cover_url
   } = req.body;
 
+  // Send the user back to whichever upload form they came from. The
+  // unified /books/new posts here for the PDF tab, and there is also
+  // the legacy /pdfs/new direct route. Hard-coding /pdfs/new on error
+  // surprised pilot testers who started on /books/new and ended up on
+  // a different-looking page after a failed upload.
+  const uploadFormUrl = (req.get("Referer") || "").includes("/books/new")
+    ? "/books/new"
+    : "/pdfs/new";
+
   if (!req.file) {
     req.flash("error", "Please select a PDF file to upload.");
-    return res.redirect("/pdfs/new");
+    return res.redirect(uploadFormUrl);
   }
 
   // --- Compression + Cloudinary upload ---------------------------------
@@ -1416,7 +1483,7 @@ app.post("/pdfs", isLoggedIn, uploadPdfMemory.single("pdf"), catchAsync(async (r
       : "Could not upload PDF. Please try again or use a smaller file.";
     console.error("PDF upload pipeline error:", err.message);
     req.flash("error", msg);
-    return res.redirect("/pdfs/new");
+    return res.redirect(uploadFormUrl);
   }
 
   // Coerce numeric fields safely — empty strings would otherwise fail the
@@ -1468,6 +1535,67 @@ app.post("/pdfs", isLoggedIn, uploadPdfMemory.single("pdf"), catchAsync(async (r
 
   req.flash("success", "PDF uploaded successfully!");
   res.redirect(`/pdfs/${pdf._id}`);
+}));
+
+// GET /pdfs/:id/file — server-side proxy that streams the Cloudinary
+// content back to the browser. Replaces the direct-to-Cloudinary URL
+// the show page used to hand out, which broke for two independent
+// reasons during user testing:
+//   (a) Cloudinary's free plan now restricts public delivery of raw
+//       resources (PDF / ZIP) by default — direct browser hits return
+//       a "page is not working" landing page instead of the file.
+//   (b) Even when delivery is open, the public URL pattern occasionally
+//       resolves to a Cloudinary error page on cold edges.
+// Streaming server-side avoids both: Node hits Cloudinary
+// server-to-server (which Cloudinary's restriction does not apply to),
+// then pipes the bytes through with our own Content-Type and
+// Content-Disposition headers. The client never sees a Cloudinary URL.
+//
+// `?inline=1`  → display in browser (Open in new tab button)
+// no query     → force download (Download PDF button)
+app.get("/pdfs/:id/file", catchAsync(async (req, res) => {
+  const pdf = await Pdf.findById(req.params.id);
+  if (!pdf || !pdf.cloudinary_url) {
+    req.flash("error", "PDF not found.");
+    return res.redirect("/pdfs");
+  }
+
+  const inline   = req.query.inline === "1";
+  const safeName = (pdf.title || "book")
+    .replace(/[^a-zA-Z0-9_-]/g, "_")
+    .slice(0, 100) + ".pdf";
+
+  try {
+    const upstream = await axios.get(pdf.cloudinary_url, {
+      responseType: "stream",
+      timeout: 30000,
+      // Don't throw on 4xx — we want to surface a friendlier error to
+      // the user than axios's default "Request failed with status 403".
+      validateStatus: s => s >= 200 && s < 300,
+    });
+
+    // Increment the download counter only on actual download (not inline
+    // preview). Best-effort — fire-and-forget, errors don't block the
+    // stream.
+    if (!inline) {
+      Pdf.updateOne({ _id: pdf._id }, { $inc: { download_count: 1 } })
+        .catch(e => console.warn("download_count inc failed:", e.message));
+    }
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `${inline ? "inline" : "attachment"}; filename="${safeName}"`
+    );
+    if (upstream.headers["content-length"]) {
+      res.setHeader("Content-Length", upstream.headers["content-length"]);
+    }
+    upstream.data.pipe(res);
+  } catch (err) {
+    console.error("PDF proxy fetch failed:", pdf.cloudinary_url, err.message);
+    req.flash("error", "Could not fetch this PDF. Please try again, or contact the uploader if it persists.");
+    return res.redirect(`/pdfs/${pdf._id}`);
+  }
 }));
 
 // GET /pdfs/:id — view a single PDF

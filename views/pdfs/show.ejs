@@ -1,7 +1,115 @@
-<%- layout('layouts/boilerplate') %>
+<% layout('layouts/boilerplate') %>
 
-<div class="container mt-4" style="max-width: 720px;">
-  <!-- Breadcrumb -->
+<%# /pdfs/:id show page. Visually mirrors /books/show.ejs (same Poppins
+    font, gradient background, two-column .book-card + .review-section
+    layout, same cover-image carousel sizing) so a student moving
+    between physical-book and digital-PDF detail pages doesn't see a
+    completely different design language. PDF-specific changes:
+      • no borrow / chat-with-owner / wishlist workflow;
+      • no reviews list (PDFs don't carry reviews);
+      • the right column repurposes the review-section card for the
+        description, upload metadata, and uploader info;
+      • the action buttons are Download (forces attachment) + Open in
+        new tab (inline) — both routed through /pdfs/:id/file (the
+        server-side proxy that streams Cloudinary content with the
+        right Content-Disposition header so direct delivery quirks
+        don't bite the user).                                            %>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  body {
+    font-family: 'Poppins', sans-serif;
+    background: linear-gradient(135deg, #f4f6f8, #e8f5ee);
+    min-height: 100vh;
+  }
+  .container { max-width: 1150px; }
+  .book-section { display: flex; flex-wrap: wrap; gap: 2rem; }
+  .book-card {
+    flex: 1 1 48%;
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+    overflow: hidden;
+    padding: 1.5rem;
+  }
+  .card-img-top {
+    width: 100%;
+    height: 380px;
+    object-fit: cover;
+    border-radius: 12px;
+    border: 1px solid #e0e0e0;
+  }
+  .pdf-cover-fallback {
+    width: 100%;
+    height: 380px;
+    border-radius: 12px;
+    border: 1px solid #e0e0e0;
+    background: linear-gradient(135deg, #e8f5ee, #d1f0e0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 6rem;
+    color: #198754;
+  }
+  .book-title {
+    font-size: 1.7rem;
+    font-weight: 600;
+    color: #222;
+    margin-top: 1rem;
+    text-align: center;
+  }
+  .book-info p { margin: 0.5rem 0; color: #444; font-size: 0.95rem; }
+  .btn-gradient {
+    background: linear-gradient(90deg, #198754, #34c759);
+    color: #fff !important;
+    border: none;
+    padding: 0.6rem 1.3rem;
+    border-radius: 8px;
+    font-weight: 500;
+    transition: 0.3s ease;
+  }
+  .btn-gradient:hover {
+    background: linear-gradient(90deg, #157347, #28a745);
+    transform: translateY(-2px);
+  }
+  .review-section { flex: 1 1 48%; }
+  .review-form, .review-list {
+    background: #fff;
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+  }
+  .review-form h4 { font-weight: 600; color: #222; margin-bottom: 1rem; }
+  .review-card {
+    background: #f8faf9;
+    border-left: 5px solid #34c759;
+    padding: 1rem;
+    border-radius: 10px;
+    margin-bottom: 1rem;
+  }
+  .review-card h5 { font-size: 1rem; font-weight: 600; color: #198754; }
+  .review-card p { color: #333; font-size: 0.95rem; }
+  .review-card .card-subtitle { font-size: 0.85rem; }
+  .resource-badge {
+    display: inline-block;
+    padding: 0.3rem 0.8rem;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin-bottom: 0.6rem;
+  }
+  .resource-badge--textbook        { background: #cfe2ff; color: #084298; }
+  .resource-badge--notes           { background: #d1fae5; color: #065f46; }
+  .resource-badge--previous_papers { background: #fff3cd; color: #856404; }
+  .resource-badge--reference       { background: #e2e3e5; color: #41464b; }
+  @media (max-width: 992px) {
+    .book-section { flex-direction: column; }
+    .book-card, .review-section { flex: 1 1 100%; }
+  }
+</style>
+
+<div class="container py-5">
   <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb">
       <li class="breadcrumb-item"><a href="/pdfs">Digital Library</a></li>
@@ -9,96 +117,116 @@
     </ol>
   </nav>
 
-  <div class="card shadow-sm">
-    <div class="card-body">
-      <!-- Cover + Title row. Cover is autofilled from Google Books on upload
-           (no file stored — just the URL). Fallback to a generic PDF icon
-           when the uploader didn't pick a Google Books candidate. -->
-      <div class="d-flex gap-3 align-items-start mb-2">
-        <div style="flex-shrink: 0;">
-          <% if (pdf.cover_url) { %>
-            <img src="<%= pdf.cover_url %>" alt="Cover" class="rounded shadow-sm"
-                 style="width: 110px; height: 160px; object-fit: cover;">
-          <% } else { %>
-            <div class="rounded bg-light d-flex align-items-center justify-content-center border"
-                 style="width: 110px; height: 160px; font-size: 3rem;">📄</div>
-          <% } %>
-        </div>
-        <div class="flex-grow-1">
-          <span class="badge bg-<%= pdf.resource_type === 'textbook' ? 'primary' : pdf.resource_type === 'notes' ? 'success' : pdf.resource_type === 'previous_papers' ? 'warning text-dark' : 'secondary' %> mb-2">
-            <%= pdf.resource_type.replace('_', ' ').toUpperCase() %>
-          </span>
-          <h2 class="card-title mt-1 mb-0"><%= pdf.title %></h2>
-        </div>
-      </div>
+  <div class="book-section">
 
-      <!-- Metadata -->
-      <table class="table table-sm table-borderless mt-3 mb-3" style="max-width: 400px;">
-        <tr><td class="text-muted">Subject</td><td><strong><%= pdf.subject %></strong></td></tr>
-        <% if (pdf.course) { %><tr><td class="text-muted">Course</td><td><%= pdf.course %></td></tr><% } %>
-        <% if (pdf.department) { %><tr><td class="text-muted">Department</td><td><%= pdf.department %></td></tr><% } %>
-        <% if (pdf.professor) { %><tr><td class="text-muted">By</td><td><%= pdf.professor %></td></tr><% } %>
-        <% if (pdf.uploadedBy) { %><tr><td class="text-muted">Uploaded by</td><td><%= pdf.uploadedBy.username %></td></tr><% } %>
-        <tr><td class="text-muted">Downloads</td><td><%= pdf.download_count || 0 %></td></tr>
-      </table>
-
-      <% if (pdf.description) { %>
-        <p class="card-text"><%= pdf.description %></p>
+    <!-- Left: PDF Card (cover + title + info + action buttons) -->
+    <div class="book-card">
+      <% if (pdf.cover_url) { %>
+        <img src="<%= pdf.cover_url %>" class="card-img-top" alt="<%= pdf.title %> cover">
+      <% } else { %>
+        <div class="pdf-cover-fallback">📄</div>
       <% } %>
 
-      <%# Chapter list intentionally hidden from the user-facing PDF
-           show page — pilot + second user-test sessions both found
-           the heuristic-extracted entries unreliable and confusing
-           ("📄 B / 📄 Solid / 📄 P" on textbooks without an embedded
-           TOC).
-           pdf.chapter_headings is still populated by /embed-pdf at
-           upload time and is still used internally by the curriculum
-           matcher (§3.6 unit→chapter mapping) — that consumer can
-           tolerate the noise because it ranks chapters by cosine
-           similarity to the unit topic, so wrong-domain entries
-           score low and never surface. The display surface is the
-           weak link; removing the public render is the right fix
-           pending the §6.4 OCR-pipeline improvement work. %>
+      <div class="book-title"><%= pdf.title %></div>
 
+      <div class="text-center mt-2">
+        <span class="resource-badge resource-badge--<%= pdf.resource_type || 'notes' %>">
+          <%= (pdf.resource_type || 'notes').replace('_', ' ').toUpperCase() %>
+        </span>
+      </div>
 
-      <!-- Action buttons -->
-      <%
-        // Build a download URL that forces the browser to save the
-        // file as a real .pdf — Cloudinary's `fl_attachment:<filename>`
-        // delivery flag injects a Content-Disposition: attachment
-        // header AND a sensible default filename, so even the
-        // (rare) old uploads where public_id lacks the .pdf
-        // extension still download as a proper PDF.
-        //
-        // The flag is inserted right after `/raw/upload/` in the URL.
-        // Filename is sanitised the same way as the upload-time
-        // public_id so it round-trips cleanly.
-        const safeName = (pdf.title || "book")
-          .replace(/[^a-zA-Z0-9_-]/g, "_")
-          .slice(0, 100) + ".pdf";
-        const dlUrl = (pdf.cloudinary_url || "").replace(
-          "/raw/upload/",
-          `/raw/upload/fl_attachment:${safeName}/`
-        );
-      %>
-      <div class="d-flex gap-2 flex-wrap mt-3">
-        <a href="<%= dlUrl || pdf.cloudinary_url %>" class="btn btn-primary"
-           download="<%= safeName %>"
-           onclick="fetch('/pdfs/<%= pdf._id %>/download', {method:'POST'})">
+      <div class="book-info mt-3">
+        <% if (pdf.subject) { %>
+          <p><strong>Subject:</strong> <%= pdf.subject %></p>
+        <% } %>
+        <% if (pdf.course) { %>
+          <p><strong>Course:</strong> <%= pdf.course %></p>
+        <% } %>
+        <% if (pdf.department) { %>
+          <p><strong>Department:</strong> <%= pdf.department %></p>
+        <% } %>
+        <% if (pdf.professor) { %>
+          <p><strong>By Professor:</strong> <%= pdf.professor %></p>
+        <% } %>
+        <% if (pdf.uploadedBy) { %>
+          <p><strong>Uploaded by:</strong> <%= pdf.uploadedBy.username %></p>
+        <% } %>
+      </div>
+
+      <div class="text-center mt-3">
+        <%# Both buttons hit /pdfs/:id/file — the server-side proxy
+            that streams Cloudinary content with the right Content-
+            Disposition header.  ?inline=1 → preview in new tab;
+            no query → force a download.  Bypasses Cloudinary's
+            free-plan delivery quirks for raw resources.            %>
+        <a href="/pdfs/<%= pdf._id %>/file" class="btn btn-gradient mb-2">
           ⬇️ Download PDF
         </a>
-        <a href="<%= pdf.cloudinary_url %>" target="_blank" class="btn btn-outline-primary">
+        <a href="/pdfs/<%= pdf._id %>/file?inline=1" target="_blank"
+           class="btn btn-outline-success mb-2 ms-2">
           👁️ Open in new tab
         </a>
-        <a href="/pdfs" class="btn btn-outline-secondary">Back to Library</a>
 
         <% if (currentUser && pdf.uploadedBy && pdf.uploadedBy._id && pdf.uploadedBy._id.equals(currentUser._id)) { %>
-          <form action="/pdfs/<%= pdf._id %>?_method=DELETE" method="POST" class="d-inline"
+          <form action="/pdfs/<%= pdf._id %>?_method=DELETE" method="POST" class="d-inline ms-2"
                 onsubmit="return confirm('Delete this PDF permanently?')">
             <button type="submit" class="btn btn-outline-danger">Delete</button>
           </form>
         <% } %>
       </div>
     </div>
+    <!-- End PDF Card -->
+
+    <!-- Right: Description + metadata (replaces the review section
+         from the book detail page; PDFs don't carry reviews). -->
+    <div class="review-section">
+      <% if (pdf.description) { %>
+        <div class="review-form mb-4">
+          <h4>About this resource</h4>
+          <p style="color:#444; line-height:1.6; margin:0;"><%= pdf.description %></p>
+        </div>
+      <% } %>
+
+      <div class="review-list">
+        <h4 style="font-weight:600; color:#222; margin-bottom:1rem;">Resource Details</h4>
+
+        <div class="review-card">
+          <h5>📊 Stats</h5>
+          <p>
+            <strong>Downloads:</strong> <%= pdf.download_count || 0 %><br>
+            <% if (pdf.created_at) { %>
+              <strong>Uploaded:</strong> <%= new Date(pdf.created_at).toLocaleDateString() %><br>
+            <% } %>
+            <% if (pdf.semester) { %>
+              <strong>Semester:</strong> <%= pdf.semester %><br>
+            <% } %>
+            <% if (pdf.year) { %>
+              <strong>Year:</strong> <%= pdf.year %><br>
+            <% } %>
+            <% if (pdf.exam_type) { %>
+              <strong>Exam type:</strong> <%= pdf.exam_type %><br>
+            <% } %>
+            <% if (pdf.topic) { %>
+              <strong>Topic:</strong> <%= pdf.topic %>
+            <% } %>
+          </p>
+        </div>
+
+        <div class="review-card">
+          <h5>💡 Tip</h5>
+          <p>
+            Click <strong>Download PDF</strong> to save a copy to your device,
+            or <strong>Open in new tab</strong> to preview it in your browser
+            without saving.
+          </p>
+        </div>
+
+        <div class="text-center mt-3">
+          <a href="/pdfs" class="btn btn-outline-secondary">← Back to Digital Library</a>
+        </div>
+      </div>
+    </div>
+    <!-- End Right Column -->
+
   </div>
 </div>
