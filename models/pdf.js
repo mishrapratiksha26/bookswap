@@ -121,6 +121,16 @@ const pdfSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    // Same Review model that physical books use — the schema is
+    // generic (body / rating / author) and ref-agnostic, so PDFs can
+    // share it. Review IDs are pushed in by POST /pdfs/:id/reviews
+    // and pulled out by DELETE. Populated on GET /pdfs/:id so the
+    // show page can render the reviews section on the right column,
+    // mirroring the physical-book detail page.
+    reviews: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Review"
+    }],
     created_at: {
         type: Date,
         default: Date.now

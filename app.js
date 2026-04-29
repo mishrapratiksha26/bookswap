@@ -117,7 +117,14 @@ async function ensurePdfFitsCloudinary(buffer, originalName) {
   try {
     const resp = await axios.post(`${aiUrl}/compress-pdf`, formData, {
       headers: formData.getHeaders(),
-      timeout: 60000,            // textbook compression can take 20-30 s
+      // Bumped from 60 s to 150 s. Render free-tier cold-start of the
+      // Python service is 30-50 s on a fresh dyno, plus 30-60 s of
+      // actual PyMuPDF compression on a 20+ MB textbook. The previous
+      // 60 s timeout fired during cold-start, the catch block fell
+      // through to Cloudinary, Cloudinary rejected the >10 MB buffer,
+      // and the user saw "cannot upload pdf" after 1 min 10 sec
+      // (Shweta's user-test session).
+      timeout: 150000,
       responseType: "arraybuffer",
       // We want a non-2xx (e.g. 413 "still too big") to throw so the
       // catch block can extract the JSON error payload and surface it
@@ -140,12 +147,20 @@ async function ensurePdfFitsCloudinary(buffer, originalName) {
       e.userFacing = true;
       throw e;
     }
-    // Anything else — Python down, network timeout, etc. — log and let
-    // the original buffer through. Cloudinary will then reject if the
-    // file is over 10 MB, but at least we're not blocking on a flaky
-    // service for the common <10 MB case.
-    console.warn("PDF compression service failed, falling through:", err.message);
-    return buffer;
+    // Compression service unreachable / timed out / errored. The
+    // buffer is >9.5 MB by definition (we already short-circuited
+    // smaller files before calling). Falling through to Cloudinary
+    // would just trip its own >10 MB rejection ~10 s later and
+    // surface a less-specific error to the user. Surface the
+    // honest cause directly instead.
+    console.warn("PDF compression service failed:", err.code || err.message);
+    const friendly = new Error(
+      "We couldn't compress this PDF — the compression service may be " +
+      "starting up. Please wait ~30 seconds and try again, or upload " +
+      "a smaller PDF (under 10 MB)."
+    );
+    friendly.userFacing = true;
+    throw friendly;
   }
 }
 
@@ -323,22 +338,29 @@ app.get("/books", catchAsync(async (req, res) => {
         // keyword AND cosine returned fewer than 3 hits, then merges +
         // de-dups so cosine results stay first.
         const Q = query.toLowerCase();
+        // Each entry maps a query-keyword regex to the LIST of genre tags
+        // that should be surfaced. Multiple tags per row because the same
+        // user phrase ("self help") can plausibly match more than one tag
+        // in our enum — INSPIRATION/MOTIVATIONAL was the original umbrella
+        // genre; SELF_HELP was added after Shweta's user-test session
+        // asked for it as a distinct option. We pull from both so legacy
+        // and new uploads both surface for the same query.
         const GENRE_KEYWORDS = [
-            [/(?:^|\b)(?:inspir\w*|motivat\w*|self.?help|self.?improvement|personal\s*growth)/, "INSPIRATION/MOTIVATIONAL"],
-            [/(?:^|\b)(?:thrill\w*|suspense)/,                                                  "SUSPENSE/THRILLERS"],
-            [/(?:^|\b)(?:detective|mystery)/,                                                   "DETECTIVE AND MYSTERY"],
-            [/(?:^|\b)(?:horror|scary)/,                                                        "HORROR"],
-            [/(?:^|\b)(?:romance|romantic|love\s*stor\w*)/,                                     "ROMANCE"],
-            [/(?:^|\b)(?:adventure|action)/,                                                    "ACTION AND ADVENTURE"],
-            [/(?:^|\b)(?:autobiograph\w*|biograph\w*|memoir)/,                                  "AUTOBIOGRAPHY/BIOGRAPHY"],
-            [/(?:^|\b)(?:religion|religious|spiritual)/,                                        "RELIGIOUS"],
-            [/(?:^|\b)(?:history|historical)/,                                                  "HISTORY"],
-            [/(?:^|\b)(?:fiction|novel|fantasy|sci.?fi)/,                                       "FICTION"],
-            [/(?:^|\b)(?:textbook|educational|academic|study)/,                                 "EDUCATIONAL"],
+            [/(?:^|\b)(?:inspir\w*|motivat\w*|self.?help|self.?improvement|personal\s*growth)/, ["INSPIRATION/MOTIVATIONAL", "SELF_HELP"]],
+            [/(?:^|\b)(?:thrill\w*|suspense)/,                                                  ["SUSPENSE/THRILLERS"]],
+            [/(?:^|\b)(?:detective|mystery)/,                                                   ["DETECTIVE AND MYSTERY"]],
+            [/(?:^|\b)(?:horror|scary)/,                                                        ["HORROR"]],
+            [/(?:^|\b)(?:romance|romantic|love\s*stor\w*)/,                                     ["ROMANCE"]],
+            [/(?:^|\b)(?:adventure|action)/,                                                    ["ACTION AND ADVENTURE"]],
+            [/(?:^|\b)(?:autobiograph\w*|biograph\w*|memoir)/,                                  ["AUTOBIOGRAPHY/BIOGRAPHY"]],
+            [/(?:^|\b)(?:religion|religious|spiritual)/,                                        ["RELIGIOUS"]],
+            [/(?:^|\b)(?:history|historical)/,                                                  ["HISTORY"]],
+            [/(?:^|\b)(?:fiction|novel|fantasy|sci.?fi)/,                                       ["FICTION"]],
+            [/(?:^|\b)(?:textbook|educational|academic|study)/,                                 ["EDUCATIONAL"]],
         ];
-        const matchedGenre = (GENRE_KEYWORDS.find(([rx]) => rx.test(Q)) || [])[1];
-        if (matchedGenre && searchResults.length < 3) {
-            const genreHits = await Book.find({ genre: matchedGenre })
+        const matchedGenres = (GENRE_KEYWORDS.find(([rx]) => rx.test(Q)) || [])[1];
+        if (matchedGenres && searchResults.length < 3) {
+            const genreHits = await Book.find({ genre: { $in: matchedGenres } })
                 .sort({ avg_rating: -1, _id: -1 })
                 .limit(5)
                 .lean();
@@ -630,6 +652,23 @@ app.get(
           path: "author",
         },
       });
+
+    // Orphaned-listing guard. Mongoose's populate returns book.owner =
+    // null when the User document was deleted but the book still
+    // references its ObjectId — referential integrity isn't enforced
+    // at the schema level, so old listings whose owners closed their
+    // accounts surface as crashes the moment someone clicks them
+    // (the show template reads book.owner._id unconditionally). User
+    // testing turned this up on Atomic Habits and the Number Theory
+    // book.  Render a friendly redirect rather than a 500.
+    if (!book) {
+      req.flash("error", "Book not found.");
+      return res.redirect("/books");
+    }
+    if (!book.owner) {
+      req.flash("error", "This listing is no longer available — the original lister has left the platform.");
+      return res.redirect("/books");
+    }
 
     let similarBooks = [];
     try {
@@ -1565,47 +1604,137 @@ app.get("/pdfs/:id/file", catchAsync(async (req, res) => {
     .replace(/[^a-zA-Z0-9_-]/g, "_")
     .slice(0, 100) + ".pdf";
 
-  try {
-    const upstream = await axios.get(pdf.cloudinary_url, {
-      responseType: "stream",
-      timeout: 30000,
-      // Don't throw on 4xx — we want to surface a friendlier error to
-      // the user than axios's default "Request failed with status 403".
-      validateStatus: s => s >= 200 && s < 300,
-    });
-
-    // Increment the download counter only on actual download (not inline
-    // preview). Best-effort — fire-and-forget, errors don't block the
-    // stream.
-    if (!inline) {
-      Pdf.updateOne({ _id: pdf._id }, { $inc: { download_count: 1 } })
-        .catch(e => console.warn("download_count inc failed:", e.message));
+  // Try the stored public URL first; if that fails (Cloudinary's free
+  // plan defaults to "Restricted media types" = PDF, which 401s the
+  // public URL even server-side), fall through to a signed URL built
+  // via the Cloudinary SDK. Signed URLs carry an HMAC of the public_id
+  // and bypass the restricted-media gate. Expiration default is 1 h
+  // which is plenty for the click-then-stream pattern.
+  const tryUrls = [pdf.cloudinary_url];
+  if (pdf.cloudinary_public_id) {
+    try {
+      const { cloudinary } = require("./cloudinary");
+      const signed = cloudinary.url(pdf.cloudinary_public_id, {
+        resource_type: "raw",
+        type:          "upload",
+        sign_url:      true,
+        secure:        true,
+      });
+      if (signed) tryUrls.push(signed);
+    } catch (e) {
+      console.warn("Cloudinary signed-url construction failed:", e.message);
     }
+  }
 
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      `${inline ? "inline" : "attachment"}; filename="${safeName}"`
-    );
-    if (upstream.headers["content-length"]) {
-      res.setHeader("Content-Length", upstream.headers["content-length"]);
+  let upstream = null;
+  let lastErr  = null;
+  for (const url of tryUrls) {
+    try {
+      upstream = await axios.get(url, {
+        responseType: "stream",
+        timeout:      30000,
+        maxRedirects: 5,
+        validateStatus: s => s >= 200 && s < 300,
+      });
+      break;
+    } catch (err) {
+      lastErr = err;
+      const status = err.response && err.response.status;
+      console.warn("PDF proxy fetch attempt failed:", url, status || err.code || err.message);
+      // Drain the stream body if any so we don't leak sockets
+      if (err.response && err.response.data && typeof err.response.data.resume === "function") {
+        err.response.data.resume();
+      }
     }
-    upstream.data.pipe(res);
-  } catch (err) {
-    console.error("PDF proxy fetch failed:", pdf.cloudinary_url, err.message);
-    req.flash("error", "Could not fetch this PDF. Please try again, or contact the uploader if it persists.");
+  }
+
+  if (!upstream) {
+    const status = lastErr && lastErr.response && lastErr.response.status;
+    const explain = status === 401 || status === 403
+      ? "The PDF host is rejecting requests for this file (likely a Cloudinary 'Restricted media types' setting). Ask the admin to allow PDF and ZIP delivery in the Cloudinary dashboard."
+      : "Could not fetch this PDF. Please try again in a moment.";
+    req.flash("error", explain);
     return res.redirect(`/pdfs/${pdf._id}`);
   }
+
+  // Increment download counter only on actual download (not preview).
+  if (!inline) {
+    Pdf.updateOne({ _id: pdf._id }, { $inc: { download_count: 1 } })
+      .catch(e => console.warn("download_count inc failed:", e.message));
+  }
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader(
+    "Content-Disposition",
+    `${inline ? "inline" : "attachment"}; filename="${safeName}"`
+  );
+  if (upstream.headers["content-length"]) {
+    res.setHeader("Content-Length", upstream.headers["content-length"]);
+  }
+  upstream.data.pipe(res);
 }));
 
 // GET /pdfs/:id — view a single PDF
 app.get("/pdfs/:id", catchAsync(async (req, res) => {
-  const pdf = await Pdf.findById(req.params.id).populate("uploadedBy", "username");
+  const pdf = await Pdf.findById(req.params.id)
+    .populate("uploadedBy", "username")
+    .populate({
+      path: "reviews",
+      populate: { path: "author", select: "username" }
+    });
   if (!pdf) {
     req.flash("error", "PDF not found.");
     return res.redirect("/pdfs");
   }
   res.render("pdfs/show", { pdf });
+}));
+
+// POST /pdfs/:id/reviews — add a review to a PDF.
+// Same Review model + middleware chain physical books use; the only
+// difference is the reviews-array is on Pdf instead of Book. Uploaders
+// can't review their own PDFs (same conflict-of-interest rule as
+// books).
+app.post("/pdfs/:id/reviews", isLoggedIn, catchAsync(async (req, res) => {
+  const Review = require("./models/review");
+  const pdf = await Pdf.findById(req.params.id);
+  if (!pdf) {
+    req.flash("error", "PDF not found.");
+    return res.redirect("/pdfs");
+  }
+  if (pdf.uploadedBy && pdf.uploadedBy.equals(req.user._id)) {
+    req.flash("error", "You can't review your own upload.");
+    return res.redirect(`/pdfs/${req.params.id}`);
+  }
+  const review = new Review({
+    body:   req.body.review.body,
+    rating: Number(req.body.review.rating) || 3,
+    author: req.user._id,
+  });
+  await review.save();
+  pdf.reviews.push(review._id);
+  await pdf.save();
+  req.flash("success", "Review posted.");
+  res.redirect(`/pdfs/${pdf._id}`);
+}));
+
+// DELETE /pdfs/:id/reviews/:reviewId — remove your own review.
+// Authorisation is by review.author, not by PDF uploader — so the
+// uploader cannot delete reviews they disagree with.
+app.delete("/pdfs/:id/reviews/:reviewId", isLoggedIn, catchAsync(async (req, res) => {
+  const Review = require("./models/review");
+  const review = await Review.findById(req.params.reviewId);
+  if (!review) {
+    req.flash("error", "Review not found.");
+    return res.redirect(`/pdfs/${req.params.id}`);
+  }
+  if (!review.author.equals(req.user._id)) {
+    req.flash("error", "You can only delete your own reviews.");
+    return res.redirect(`/pdfs/${req.params.id}`);
+  }
+  await Pdf.findByIdAndUpdate(req.params.id, { $pull: { reviews: review._id } });
+  await Review.findByIdAndDelete(req.params.reviewId);
+  req.flash("success", "Review removed.");
+  res.redirect(`/pdfs/${req.params.id}`);
 }));
 
 // DELETE /pdfs/:id — remove a PDF

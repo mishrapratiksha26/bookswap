@@ -436,7 +436,7 @@
 
       const botMsg = document.createElement('div');
       botMsg.className = 'chat-msg bot';
-      botMsg.innerHTML = formatResponse(data.response);
+      botMsg.innerHTML = formatResponse(data.response, data.cited_resources || []);
       messages.appendChild(botMsg);
       appendToHistory('bot', data.response || '');
     } catch (err) {
@@ -463,7 +463,7 @@
   //   - blank lines split paragraphs
   //   - **bold** stays bold
   //   - inline links keep working
-  function formatResponse(text) {
+  function formatResponse(text, cited) {
     if (!text) return 'No response received.';
 
     // Escape any raw HTML in the input first to avoid injection from
@@ -475,6 +475,38 @@
 
     // Turn **bold** -> <strong> after escape so the asterisks survive.
     const applyBold = s => s.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    // Linkify any book / PDF title the agent mentioned, using the
+    // cited_resources list returned by the /agent endpoint (Shweta's
+    // user-test feedback: "could you include links of these books so
+    // when I click on the book name I can directly go to borrow it").
+    //
+    // Replacement runs on the ALREADY-ESCAPED string so we have to
+    // escape the title the same way before searching, then inject a
+    // raw anchor tag in place. Sentinel-token swap keeps the bold-
+    // and book-line regexes from re-matching the anchor tag's content.
+    const escapeRegExp = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const sortedCited  = (cited || [])
+      .filter(c => c && c.id && c.title && c.title.trim().length >= 4)
+      // Longest-first so "Mechanical Design: Theory and Methodology"
+      // is matched before "Mechanical Design".
+      .sort((a, b) => b.title.length - a.title.length);
+    const linkPlaceholders = [];
+    const applyLinks = s => {
+      let out = s;
+      for (const c of sortedCited) {
+        const escapedTitle = escape(c.title);
+        const rx = new RegExp(escapeRegExp(escapedTitle), 'i');
+        if (!rx.test(out)) continue;
+        const path  = c.type === 'pdf' ? '/pdfs/' : '/books/';
+        const anchor = `<a class="chat-resource-link" href="${path}${c.id}" target="_blank" rel="noopener">${escapedTitle}</a>`;
+        const tok = `[[LNK_${linkPlaceholders.length}]]`;
+        linkPlaceholders.push(anchor);
+        out = out.replace(rx, tok);
+      }
+      return out;
+    };
+    const restoreLinks = s => s.replace(/\[\[LNK_(\d+)\]\]/g, (_, i) => linkPlaceholders[Number(i)]);
 
     // Detect a "section heading" line — short, starts with 📗 or 📄,
     // and the rest is a label (no colon-separated entry).
@@ -492,7 +524,7 @@
       const entryCount = lines.filter(l => ENTRY_RE.test(l)).length;
       if (entryCount >= 2 && entryCount >= lines.length / 2) {
         return lines.map(l => {
-          const escaped = applyBold(escape(l));
+          const escaped = applyLinks(applyBold(escape(l)));
           if (HEADING_RE.test(l) && l.length < 60) {
             return `<span class="chat-section-heading">${escaped}</span>`;
           }
@@ -504,10 +536,10 @@
       }
 
       // Otherwise just a regular paragraph (greeting, follow-up question, etc.).
-      const inner = lines.map(l => applyBold(escape(l))).join('<br>');
+      const inner = lines.map(l => applyLinks(applyBold(escape(l)))).join('<br>');
       return `<p>${inner}</p>`;
     }).join('');
 
-    return html;
+    return restoreLinks(html);
   }
 </script>

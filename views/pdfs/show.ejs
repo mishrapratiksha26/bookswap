@@ -4,16 +4,26 @@
     font, gradient background, two-column .book-card + .review-section
     layout, same cover-image carousel sizing) so a student moving
     between physical-book and digital-PDF detail pages doesn't see a
-    completely different design language. PDF-specific changes:
-      • no borrow / chat-with-owner / wishlist workflow;
-      • no reviews list (PDFs don't carry reviews);
-      • the right column repurposes the review-section card for the
-        description, upload metadata, and uploader info;
-      • the action buttons are Download (forces attachment) + Open in
-        new tab (inline) — both routed through /pdfs/:id/file (the
-        server-side proxy that streams Cloudinary content with the
-        right Content-Disposition header so direct delivery quirks
-        don't bite the user).                                            %>
+    completely different design language.
+
+    Layout matches the books detail page exactly:
+      LEFT (.book-card)
+        cover image (or fallback icon)
+        title (centred)
+        resource-type badge (centred)
+        metadata (Subject / Course / Department / Professor / Uploaded by)
+        DESCRIPTION below the metadata block
+        action button row — only Download (single CTA, aligned)
+
+      RIGHT (.review-section)
+        review form (rating + body, hidden for the uploader)
+        review list (one card per review, with author + delete-own button)
+
+    Reviews use the same Review model the books detail page uses;
+    POST goes to /pdfs/:id/reviews, delete to /pdfs/:id/reviews/:rid.
+    Uploaders can't review their own upload (same conflict-of-interest
+    rule as books). Open-in-new-tab button removed per Shweta's
+    pilot feedback (one CTA, not two). %>
 
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
 
@@ -60,6 +70,13 @@
     text-align: center;
   }
   .book-info p { margin: 0.5rem 0; color: #444; font-size: 0.95rem; }
+  .pdf-description {
+    margin-top: 1rem;
+    color: #444;
+    font-size: 0.95rem;
+    line-height: 1.6;
+    white-space: pre-line;
+  }
   .btn-gradient {
     background: linear-gradient(90deg, #198754, #34c759);
     color: #fff !important;
@@ -72,6 +89,15 @@
   .btn-gradient:hover {
     background: linear-gradient(90deg, #157347, #28a745);
     transform: translateY(-2px);
+  }
+  .btn-outline-danger { border-radius: 6px; }
+  .pdf-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 1.2rem;
   }
   .review-section { flex: 1 1 48%; }
   .review-form, .review-list {
@@ -97,7 +123,7 @@
     border-radius: 20px;
     font-size: 0.78rem;
     font-weight: 600;
-    margin-bottom: 0.6rem;
+    margin-top: 0.5rem;
   }
   .resource-badge--textbook        { background: #cfe2ff; color: #084298; }
   .resource-badge--notes           { background: #d1fae5; color: #065f46; }
@@ -119,8 +145,12 @@
 
   <div class="book-section">
 
-    <!-- Left: PDF Card (cover + title + info + action buttons) -->
+    <!-- ============================================================== -->
+    <!-- LEFT: PDF Card                                                  -->
+    <!-- Cover -> Title -> Badge -> Metadata -> Description -> Actions   -->
+    <!-- ============================================================== -->
     <div class="book-card">
+
       <% if (pdf.cover_url) { %>
         <img src="<%= pdf.cover_url %>" class="card-img-top" alt="<%= pdf.title %> cover">
       <% } else { %>
@@ -129,7 +159,7 @@
 
       <div class="book-title"><%= pdf.title %></div>
 
-      <div class="text-center mt-2">
+      <div class="text-center">
         <span class="resource-badge resource-badge--<%= pdf.resource_type || 'notes' %>">
           <%= (pdf.resource_type || 'notes').replace('_', ' ').toUpperCase() %>
         </span>
@@ -151,24 +181,39 @@
         <% if (pdf.uploadedBy) { %>
           <p><strong>Uploaded by:</strong> <%= pdf.uploadedBy.username %></p>
         <% } %>
+        <% if (pdf.semester) { %>
+          <p><strong>Semester:</strong> <%= pdf.semester %></p>
+        <% } %>
+        <% if (pdf.year) { %>
+          <p><strong>Year:</strong> <%= pdf.year %></p>
+        <% } %>
+        <% if (pdf.exam_type) { %>
+          <p><strong>Exam type:</strong> <%= pdf.exam_type %></p>
+        <% } %>
+        <% if (pdf.topic) { %>
+          <p><strong>Topic:</strong> <%= pdf.topic %></p>
+        <% } %>
+        <p><strong>Downloads:</strong> <%= pdf.download_count || 0 %></p>
       </div>
 
-      <div class="text-center mt-3">
-        <%# Both buttons hit /pdfs/:id/file — the server-side proxy
-            that streams Cloudinary content with the right Content-
-            Disposition header.  ?inline=1 → preview in new tab;
-            no query → force a download.  Bypasses Cloudinary's
-            free-plan delivery quirks for raw resources.            %>
-        <a href="/pdfs/<%= pdf._id %>/file" class="btn btn-gradient mb-2">
+      <% if (pdf.description) { %>
+        <div class="pdf-description"><%= pdf.description %></div>
+      <% } %>
+
+      <%# Single primary CTA — Download. Open-in-new-tab dropped after
+           Shweta's session ("no need for the open in new tab button").
+           Both buttons used to route through /pdfs/:id/file; the
+           download button still does, with the attachment header
+           that forces a save. The Delete button only renders for
+           the uploader, kept inline with the download button so all
+           CTAs sit in one aligned row. %>
+      <div class="pdf-actions">
+        <a href="/pdfs/<%= pdf._id %>/file" class="btn btn-gradient">
           ⬇️ Download PDF
-        </a>
-        <a href="/pdfs/<%= pdf._id %>/file?inline=1" target="_blank"
-           class="btn btn-outline-success mb-2 ms-2">
-          👁️ Open in new tab
         </a>
 
         <% if (currentUser && pdf.uploadedBy && pdf.uploadedBy._id && pdf.uploadedBy._id.equals(currentUser._id)) { %>
-          <form action="/pdfs/<%= pdf._id %>?_method=DELETE" method="POST" class="d-inline ms-2"
+          <form action="/pdfs/<%= pdf._id %>?_method=DELETE" method="POST" class="d-inline"
                 onsubmit="return confirm('Delete this PDF permanently?')">
             <button type="submit" class="btn btn-outline-danger">Delete</button>
           </form>
@@ -177,56 +222,66 @@
     </div>
     <!-- End PDF Card -->
 
-    <!-- Right: Description + metadata (replaces the review section
-         from the book detail page; PDFs don't carry reviews). -->
+
+    <!-- ============================================================== -->
+    <!-- RIGHT: Review Section                                           -->
+    <!-- Mirrors books/show.ejs review block exactly. Form goes to       -->
+    <!-- /pdfs/:id/reviews, delete to /pdfs/:id/reviews/:rid.            -->
+    <!-- ============================================================== -->
     <div class="review-section">
-      <% if (pdf.description) { %>
+      <%
+        // Uploaders shouldn't rate their own upload — same conflict-of-
+        // interest rule as physical books on /books/:id.
+        const isUploader = currentUser && pdf.uploadedBy &&
+                           pdf.uploadedBy._id &&
+                           pdf.uploadedBy._id.equals(currentUser._id);
+      %>
+
+      <% if (currentUser && !isUploader) { %>
         <div class="review-form mb-4">
-          <h4>About this resource</h4>
-          <p style="color:#444; line-height:1.6; margin:0;"><%= pdf.description %></p>
+          <h4>Leave a Review</h4>
+          <form action="/pdfs/<%= pdf._id %>/reviews" method="POST">
+            <div class="mb-3">
+              <label for="rating" class="form-label">Rating</label>
+              <input type="range" class="form-range" min="1" max="5" name="review[rating]" id="rating">
+            </div>
+            <div class="mb-3">
+              <label for="body" class="form-label">Review</label>
+              <textarea class="form-control" name="review[body]" id="body" rows="3" required></textarea>
+            </div>
+            <button class="btn btn-gradient">Submit</button>
+          </form>
+        </div>
+      <% } else if (isUploader) { %>
+        <div class="alert alert-info">
+          You uploaded this resource, so you can't review it. Reviews come from people who've used it.
+        </div>
+      <% } else { %>
+        <div class="alert alert-warning">
+          Login to leave a review: <a href="/login" class="alert-link">Login</a>
         </div>
       <% } %>
 
       <div class="review-list">
-        <h4 style="font-weight:600; color:#222; margin-bottom:1rem;">Resource Details</h4>
-
-        <div class="review-card">
-          <h5>📊 Stats</h5>
-          <p>
-            <strong>Downloads:</strong> <%= pdf.download_count || 0 %><br>
-            <% if (pdf.created_at) { %>
-              <strong>Uploaded:</strong> <%= new Date(pdf.created_at).toLocaleDateString() %><br>
+        <% if (!pdf.reviews || pdf.reviews.length === 0) { %>
+          <p class="text-muted">No reviews yet.</p>
+        <% } %>
+        <% (pdf.reviews || []).forEach(review => { %>
+          <% if (!review || !review.author) return; %>
+          <div class="review-card">
+            <h5>Rating: <%= review.rating %> ⭐</h5>
+            <p><%= review.body %></p>
+            <h6 class="card-subtitle text-muted">By <%= review.author.username %></h6>
+            <% if (currentUser && review.author._id && review.author._id.toString() === currentUser._id.toString()) { %>
+              <form action="/pdfs/<%= pdf._id %>/reviews/<%= review._id %>?_method=DELETE" method="POST" class="mt-2">
+                <button class="btn btn-sm btn-outline-danger">Delete</button>
+              </form>
             <% } %>
-            <% if (pdf.semester) { %>
-              <strong>Semester:</strong> <%= pdf.semester %><br>
-            <% } %>
-            <% if (pdf.year) { %>
-              <strong>Year:</strong> <%= pdf.year %><br>
-            <% } %>
-            <% if (pdf.exam_type) { %>
-              <strong>Exam type:</strong> <%= pdf.exam_type %><br>
-            <% } %>
-            <% if (pdf.topic) { %>
-              <strong>Topic:</strong> <%= pdf.topic %>
-            <% } %>
-          </p>
-        </div>
-
-        <div class="review-card">
-          <h5>💡 Tip</h5>
-          <p>
-            Click <strong>Download PDF</strong> to save a copy to your device,
-            or <strong>Open in new tab</strong> to preview it in your browser
-            without saving.
-          </p>
-        </div>
-
-        <div class="text-center mt-3">
-          <a href="/pdfs" class="btn btn-outline-secondary">← Back to Digital Library</a>
-        </div>
+          </div>
+        <% }) %>
       </div>
     </div>
-    <!-- End Right Column -->
+    <!-- End Review Section -->
 
   </div>
 </div>
