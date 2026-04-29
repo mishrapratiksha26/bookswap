@@ -64,6 +64,71 @@
         })()
        </script>
     <%- include('../partials/chat-widget')%>
+
+    <script>
+      // Cover-image quality upgrader.
+      //
+      // Books uploaded before the zoom=2 -> zoom=5 fix landed have
+      // their Google Books image URLs baked into MongoDB at the old
+      // low-resolution zoom level.  Migrating every existing
+      // book.images[].url and pdf.cover_url document is one option
+      // but fragile (sets a precedent of running ad-hoc migrations
+      // on every cover-related tweak).  Instead we rewrite the URL
+      // in the browser at render time:
+      //
+      //   - drop &edge=curl (the dated page-curl shadow Google adds
+      //     by default)
+      //   - force zoom=5 (Google's largest reliably-served version,
+      //     ~700px wide vs ~200px at zoom=2)
+      //
+      // OpenLibrary cover URLs are already high-res and need no fix,
+      // so the matcher only triggers on Google Books / Google
+      // usercontent hostnames.
+      //
+      // Runs after DOM parse + on any later DOM mutation (new
+      // recommendation cards loaded via fetch, etc.).  One-shot per
+      // <img> — we mark patched nodes with a data-attribute so the
+      // mutation observer doesn't loop on its own src writes.
+      (function() {
+        function upgrade(url) {
+          if (!url) return url;
+          if (!/books\.google\.com|googleusercontent\.com/.test(url)) return url;
+          var u = url.replace(/&edge=curl/g, "");
+          if (/[?&]zoom=\d+/.test(u)) {
+            u = u.replace(/([?&])zoom=\d+/, "$1zoom=5");
+          } else {
+            u += (u.includes("?") ? "&" : "?") + "zoom=5";
+          }
+          return u;
+        }
+        function patch(root) {
+          var imgs = (root || document).querySelectorAll("img:not([data-cover-upgraded])");
+          for (var i = 0; i < imgs.length; i++) {
+            var img = imgs[i];
+            var src = img.getAttribute("src");
+            var fixed = upgrade(src);
+            if (fixed && fixed !== src) {
+              img.setAttribute("src", fixed);
+            }
+            img.setAttribute("data-cover-upgraded", "1");
+          }
+        }
+        // Initial pass on whatever's already in the DOM.
+        patch(document);
+        // Watch for cards added later (AI recommendations, infinite
+        // scroll, modal previews).
+        if (window.MutationObserver) {
+          new MutationObserver(function(muts) {
+            for (var i = 0; i < muts.length; i++) {
+              var added = muts[i].addedNodes;
+              for (var j = 0; j < added.length; j++) {
+                if (added[j].nodeType === 1) patch(added[j]);
+              }
+            }
+          }).observe(document.body, { childList: true, subtree: true });
+        }
+      })();
+    </script>
 </body>
 
 </html>
