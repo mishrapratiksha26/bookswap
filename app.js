@@ -153,6 +153,16 @@ async function ensurePdfFitsCloudinary(buffer, originalName) {
 // shape `multer-storage-cloudinary` would have produced (`path` and
 // `filename`) so existing code paths that read those fields continue
 // to work without modification.
+//
+// IMPORTANT: the public_id MUST end in ".pdf". A user-test session
+// surfaced the bug — without the extension Cloudinary's raw-resource
+// URL resolved to e.g. ".../1745_book_name" and the browser saved
+// the file with no extension. WPS Office then opened it as raw bytes
+// and showed garbage. With ".pdf" baked into the public_id, the URL
+// ends in .pdf, the browser saves it as a .pdf file, and every PDF
+// reader handles it correctly. Cloudinary stores it under exactly
+// that path (it does NOT automatically infer or append extensions
+// for raw resources, only for image / video).
 function uploadBufferToCloudinary(buffer, folder, originalname) {
   const { cloudinary } = require("./cloudinary");
   return new Promise((resolve, reject) => {
@@ -161,11 +171,20 @@ function uploadBufferToCloudinary(buffer, folder, originalname) {
         folder,
         resource_type: "raw",
         // public_id can't have spaces or non-ASCII; sanitise the
-        // original filename and prefix with timestamp for uniqueness.
-        public_id: `${Date.now()}_${(originalname || "pdf")
+        // original filename, prefix with timestamp for uniqueness,
+        // and re-append the .pdf extension explicitly so the served
+        // URL is recognisable to browsers and PDF readers.
+        public_id: `${Date.now()}_${(originalname || "book")
           .replace(/\.pdf$/i, "")
           .replace(/[^a-zA-Z0-9_-]/g, "_")
-          .slice(0, 100)}`,
+          .slice(0, 100)}.pdf`,
+        use_filename: false,
+        unique_filename: false,
+        // Explicit Content-Type so Cloudinary serves the file with
+        // application/pdf in the response headers — without this, raw
+        // resources sometimes get application/octet-stream which makes
+        // the browser save without recognising it as a PDF.
+        format: "pdf",
       },
       (err, result) => (err ? reject(err) : resolve(result)),
     );
@@ -983,10 +1002,42 @@ app.get("/api/book-metadata", catchAsync(async (req, res) => {
             const v = item.volumeInfo || {};
             const isbn = (v.industryIdentifiers || []).find(i => i.type === "ISBN_13")
                       || (v.industryIdentifiers || []).find(i => i.type === "ISBN_10");
-            // Google returns http:// image URLs by default — force https to
-            // avoid mixed-content blocks on our https site.
-            let cover = (v.imageLinks && (v.imageLinks.thumbnail || v.imageLinks.smallThumbnail)) || null;
-            if (cover) cover = cover.replace(/^http:/, "https:");
+
+            // Cover image — picked at the highest resolution Google Books
+            // returns, falling through to thumbnail as a last resort.
+            // imageLinks fields by ascending size:
+            //   smallThumbnail (~80×120)  - blurry, avoid
+            //   thumbnail      (~128×196) - fine for tiny lists
+            //   small          (~300×450) - decent for detail pages
+            //   medium         (~575×860) - good
+            //   large          (~800×1200)- great
+            //   extraLarge     (~1280×...)- rarely populated
+            // Most popular trade books only return thumbnail/smallThumbnail
+            // by default, but the same URL with `&zoom=0` and no edge curl
+            // serves a much higher-quality image — a documented quirk of
+            // Google's books image proxy.
+            const links = v.imageLinks || {};
+            let cover = links.extraLarge || links.large || links.medium ||
+                        links.small || links.thumbnail || links.smallThumbnail || null;
+
+            if (cover) {
+                // Force https — Google still serves http:// by default and the
+                // browser blocks mixed content on an https site.
+                cover = cover.replace(/^http:/, "https:");
+                // Drop the page-curl shadow effect that Google overlays on
+                // thumbnails (looks dated; obscures detail).
+                cover = cover.replace(/&edge=curl/g, "");
+                // Bump zoom up so when only thumbnail/smallThumbnail were
+                // returned, we still pull the higher-res underlying image.
+                // Google's books image proxy honours this query param.
+                if (/[?&]zoom=\d+/.test(cover)) {
+                    cover = cover.replace(/([?&])zoom=\d+/, "$1zoom=2");
+                } else if (cover.includes("?")) {
+                    cover = cover + "&zoom=2";
+                } else {
+                    cover = cover + "?zoom=2";
+                }
+            }
             return {
                 title:            v.title || "",
                 authors:          v.authors || [],

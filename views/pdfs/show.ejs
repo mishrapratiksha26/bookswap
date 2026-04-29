@@ -46,31 +46,49 @@
         <p class="card-text"><%= pdf.description %></p>
       <% } %>
 
-      <!-- Chapter headings if available. Each entry is a subdocument
-           { title, page } — `page` may be null when extraction used the
-           heuristic scan (Tier 2) instead of an embedded TOC. -->
-      <% if (pdf.chapter_headings && pdf.chapter_headings.length > 0) { %>
-        <hr>
-        <h6 class="text-muted">Chapters / Topics</h6>
-        <ul class="list-group list-group-flush mb-3">
-          <% pdf.chapter_headings.slice(0, 15).forEach(h => { %>
-            <li class="list-group-item py-1 px-0 border-0">
-              <small>
-                📄 <%= h.title || '(untitled section)' %>
-                <% if (h.page) { %>
-                  <span class="badge bg-light text-muted ms-1">p. <%= h.page %></span>
-                <% } %>
-              </small>
-            </li>
-          <% }) %>
-        </ul>
-      <% } %>
+      <%# Chapter list intentionally hidden from the user-facing PDF
+           show page — pilot + second user-test sessions both found
+           the heuristic-extracted entries unreliable and confusing
+           ("📄 B / 📄 Solid / 📄 P" on textbooks without an embedded
+           TOC).
+           pdf.chapter_headings is still populated by /embed-pdf at
+           upload time and is still used internally by the curriculum
+           matcher (§3.6 unit→chapter mapping) — that consumer can
+           tolerate the noise because it ranks chapters by cosine
+           similarity to the unit topic, so wrong-domain entries
+           score low and never surface. The display surface is the
+           weak link; removing the public render is the right fix
+           pending the §6.4 OCR-pipeline improvement work. %>
+
 
       <!-- Action buttons -->
+      <%
+        // Build a download URL that forces the browser to save the
+        // file as a real .pdf — Cloudinary's `fl_attachment:<filename>`
+        // delivery flag injects a Content-Disposition: attachment
+        // header AND a sensible default filename, so even the
+        // (rare) old uploads where public_id lacks the .pdf
+        // extension still download as a proper PDF.
+        //
+        // The flag is inserted right after `/raw/upload/` in the URL.
+        // Filename is sanitised the same way as the upload-time
+        // public_id so it round-trips cleanly.
+        const safeName = (pdf.title || "book")
+          .replace(/[^a-zA-Z0-9_-]/g, "_")
+          .slice(0, 100) + ".pdf";
+        const dlUrl = (pdf.cloudinary_url || "").replace(
+          "/raw/upload/",
+          `/raw/upload/fl_attachment:${safeName}/`
+        );
+      %>
       <div class="d-flex gap-2 flex-wrap mt-3">
-        <a href="<%= pdf.cloudinary_url %>" target="_blank" class="btn btn-primary"
+        <a href="<%= dlUrl || pdf.cloudinary_url %>" class="btn btn-primary"
+           download="<%= safeName %>"
            onclick="fetch('/pdfs/<%= pdf._id %>/download', {method:'POST'})">
           ⬇️ Download PDF
+        </a>
+        <a href="<%= pdf.cloudinary_url %>" target="_blank" class="btn btn-outline-primary">
+          👁️ Open in new tab
         </a>
         <a href="/pdfs" class="btn btn-outline-secondary">Back to Library</a>
 

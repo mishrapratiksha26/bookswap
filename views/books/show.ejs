@@ -162,7 +162,11 @@
 <div class="book-info mt-3">
   <p><strong>Author:</strong> <%= book.author %></p>
   <p><strong>Genre:</strong> <%= book.genre %></p>
-  <p><strong>MRP:</strong> ₹<%= book.price %></p>
+  <%# MRP / price line removed — BookSwap is a free peer-to-peer
+       lending platform, not a marketplace. The schema still carries
+       book.price (default 0) for legacy and possible-fines use, but
+       displaying ₹0 on every book card was confusing rather than
+       informative. %>
   <p><strong>Description:</strong> <%= book.description %></p>
   <p><strong>Posted by:</strong> <%= book.owner.username %></p>
 </div>
