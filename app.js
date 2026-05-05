@@ -1361,6 +1361,9 @@ app.get('/chat/:userId', isLoggedIn, async (req, res) => {
 
   const contactMap = new Map();
   messages.forEach(msg => {
+    // Skip orphan messages — sender or receiver may have been deleted
+    // since the message was sent (populate returns null in that case).
+    if (!msg.sender || !msg.receiver) return;
     const otherUser = msg.sender._id.toString() === currentUserId.toString()
       ? msg.receiver
       : msg.sender;
@@ -1401,6 +1404,9 @@ app.get('/chat', isLoggedIn, async (req, res) => {
 
   const contactMap = new Map();
   messages.forEach(msg => {
+    // Skip orphan messages — sender or receiver may have been deleted
+    // since the message was sent (populate returns null in that case).
+    if (!msg.sender || !msg.receiver) return;
     const otherUser = msg.sender._id.toString() === currentUserId.toString()
       ? msg.receiver
       : msg.sender;
